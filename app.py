@@ -1,62 +1,90 @@
 import torch
 import gradio as gr
-from train_hope import HOPE, CONFIG, DEVICE  # Import your model definition
+import os
+import sys
 
-# 1. Load the Model
-print("Loading HOPE Model...")
-model = HOPE(CONFIG['vocab_size'], CONFIG['d_model'], CONFIG['n_layers'])
-model.load_state_dict(torch.load("hope_financial_model.pth", map_location=DEVICE))
+# Import your model definition from the training script
+from train_hope import HOPE, CONFIG, DEVICE
+
+# --- CONFIGURATION ---
+MODEL_FILENAME = "hope_bg_deep.pth" 
+
+print(f"Loading HOPE Model from {MODEL_FILENAME}...")
+
+# 1. Initialize the empty model architecture
+try:
+    model = HOPE(CONFIG['vocab_size'], CONFIG['d_model'], CONFIG['n_layers'])
+except NameError:
+    print("Error: Could not find HOPE class. Make sure train_hope.py is in the same folder.")
+    sys.exit(1)
+
+# 2. Load the file
+if not os.path.exists(MODEL_FILENAME):
+    print(f"Error: {MODEL_FILENAME} not found!")
+    sys.exit(1)
+
+checkpoint = torch.load(MODEL_FILENAME, map_location=DEVICE)
+
+# 3. UNPACK SMART CHECKPOINT
+if isinstance(checkpoint, dict) and 'model_state' in checkpoint:
+    print("Detected Smart Checkpoint. Unpacking weights...")
+    state_dict = checkpoint['model_state']
+else:
+    print("Detected Legacy Checkpoint.")
+    state_dict = checkpoint
+
+# 4. Load weights into model
+model.load_state_dict(state_dict, strict=False)
 model.to(DEVICE)
 model.eval()
+print("Model loaded successfully!")
 
-# Simple decoder (Byte-level)
-def decode(tokens):
+# --- CHAT LOGIC ---
+
+def decode_tokens(tokens):
+    """Helper to convert list of numbers to string"""
     return bytes(tokens).decode('utf-8', errors='ignore')
 
 def predict(message, history):
-    # 2. Prepare Input
-    # Convert text to bytes (0-255)
+    # Note: 'history' is passed by Gradio but we aren't using it in this simple version
+    # If you want memory, you would concatenate history string here.
+    
+    # 1. Encode Input
     input_ids = list(message.encode('utf-8'))
     x = torch.tensor([input_ids], dtype=torch.long).to(DEVICE)
     
-    # 3. Generate (Simple loop)
-    generated = []
+    generated_ids = []
     
-    # Reset Fast Memory for the new prompt (Crucial for HOPE)
-    # Note: In a full implementation, you'd integrate the reset logic here
-    # model.fast_memory.reset_state() 
-    
-    for _ in range(100): # Generate 100 tokens max
+    # 2. Generation Loop
+    for _ in range(200): # Max 200 tokens
         with torch.no_grad():
             logits = model(x)
             
-        # Get last token prediction
-        next_token_logits = logits[:, -1, :]
-        probs = torch.softmax(next_token_logits, dim=-1)
-        
-        # Sample
+        # Sampling
+        last_token_logits = logits[:, -1, :]
+        # Temperature control (hardcoded to 0.6 for stability)
+        probs = torch.softmax(last_token_logits / 0.6, dim=-1)
         next_token = torch.multinomial(probs, num_samples=1)
         
-        # Append to input for next step (Auto-regressive)
+        # Append
         x = torch.cat((x, next_token), dim=1)
-        
         token_int = next_token.item()
-        generated.append(token_int)
         
-        # Stop if we hit a specific stop token (optional)
-        if token_int == 0: break 
+        if token_int == 0: break # Stop token
         
-        # Stream the output to the UI
-        yield decode(generated)
+        generated_ids.append(token_int)
+        
+        # Stream output to UI
+        yield decode_tokens(generated_ids)
 
-# 4. Launch the "Mini Studio"
+# --- LAUNCH UI ---
 demo = gr.ChatInterface(
     predict,
-    title="HOPE Financial Model (Experimental)",
-    description="A 50M parameter Nested Learning model trained on financial news.",
-    examples=["Market outlook for", "The stock price of"],
-    type="messages" # Use standard chat format
+    title="HOPE: Nested Learning Chat",
+    description=f"Running {MODEL_FILENAME} on {DEVICE}",
+    examples=["Здравей", "Какво е това?", "Разкажи ми история"]
+    # REMOVED: type="messages" to fix compatibility error
 )
 
 if __name__ == "__main__":
-    demo.launch(share=True) # share=True creates a public link!
+    demo.launch(share=True)
