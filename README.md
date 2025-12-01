@@ -48,61 +48,6 @@ The core dependencies are lightweight:
    git clone [https://github.com/YOUR_USERNAME/HOPE-nested-learning.git](https://github.com/YOUR_USERNAME/HOPE-nested-learning.git)
    cd HOPE-nested-learning
 
-README.md Content
-
-(Copy the text below into a file named README.md in your project folder)
-Markdown
-
-# HOPE: The Nested Learning Experiment 🧠
-
-> **"Deep Learning is an illusion. Real learning is a set of nested optimization problems."**
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![Pytorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
-
-## 📖 What is this?
-This is a clean, from-scratch PyTorch implementation of the **HOPE architecture**, based on the groundbreaking paper *"Nested Learning: The Illusion of Deep Learning"* (Behrouz et al., 2024).
-
-Standard Large Language Models (LLMs) suffer from **"Anterograde Amnesia"**—once trained, they are frozen. They can't learn from new conversations without a full re-training. 
-
-**HOPE changes the paradigm.** Instead of just stacking static layers, it models intelligence as a **Continuum Memory System**:
-* **Fast Weights (Self-Modifying Layer):** A layer that *updates its own parameters* in real-time as it reads text. It learns your specific context instantly.
-* **Slow Weights (Continuum Memory):** Deep layers that update rarely, storing long-term knowledge (grammar, facts) without catastrophic forgetting.
-
-## 🚀 Key Features
-* **🧠 Self-Modifying Architecture:** Uses a "Fast Weight" mechanism (Linear Attention dual form) to adapt to the immediate prompt dynamically.
-* **🕰️ Continuum Memory System (CMS):** A hierarchy of layers that update at different frequencies (Fast, Medium, Slow), mimicking the human brain's memory consolidation.
-* **⚡ Ultra-Lightweight:** Designed to run on **Consumer Hardware** (Mac M1/M2/M3, NVIDIA RTX 3060+, or even CPU).
-* **🔄 Continual Learning:** Capable of training on Dataset A, then Dataset B, without instantly forgetting Dataset A.
-
----
-
-## 🛠️ Requirements
-
-You don't need a massive server. This implementation is optimized for **Laptops** and **Home PCs**.
-
-* **Python:** 3.9 or newer
-* **Memory:** 8GB RAM minimum (16GB recommended)
-* **GPU:** Optional but recommended (NVIDIA CUDA or Mac MPS supported)
-
-### Python Libraries
-The core dependencies are lightweight:
-* `torch` (The engine)
-* `datasets` (For streaming Hugging Face data)
-* `colorama` (For the fancy dashboard)
-* `psutil` (For memory tracking)
-* `fastapi` & `uvicorn` (Only if you want to run the local API server)
-
----
-
-## 📦 Installation
-
-1. **Clone the Repository**
-   ```bash
-   git clone [https://github.com/YOUR_USERNAME/HOPE-nested-learning.git](https://github.com/YOUR_USERNAME/HOPE-nested-learning.git)
-   cd HOPE-nested-learning
-
     Install Dependencies
     Bash
 
