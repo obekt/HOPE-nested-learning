@@ -63,35 +63,35 @@ The core dependencies are lightweight:
 Start training a model from scratch. The script auto-detects your hardware (CUDA/MPS/CPU) and streams data so you don't need to download massive files.
 Bash
 
-python train_hope.py
+    python train_hope.py
 
-    Default Dataset: Wikipedia (Bulgarian/English configurable in script).
+Default Dataset: Wikipedia (Bulgarian/English configurable in script).
 
-    Output: Saves a "brain" file to hope_bg_wiki.pth.
+Output: Saves a "brain" file to hope_bg_wiki.pth.
 
-    Dashboard: Shows real-time Loss, Speed (tok/s), and a Live Data Preview.
+Dashboard: Shows real-time Loss, Speed (tok/s), and a Live Data Preview.
 
 2. Chat in the Console 💬
 
 Test your model immediately with a lightweight interactive chat.
 Bash
 
-python chat_hope.py
+    python chat.py
 
-    Shows real-time memory usage and parameter count.
+Shows real-time memory usage and parameter count.
 
-    Type quit to exit.
+Type quit to exit.
 
 3. Connect to LM Studio / Web UI 🔌
 
 Want to use a nice UI? Run the API server, which mimics OpenAI's API.
 Bash
 
-python server_hope.py
+    python app.py
 
-    Endpoint: http://localhost:8000
+Endpoint: http://localhost:8000
 
-    Compatible with: LM Studio, Chatbox AI, SillyTavern, etc.
+Compatible with: LM Studio, Chatbox AI, SillyTavern, etc.
 
 🧪 Configuration
 
