@@ -16,30 +16,34 @@ init(autoreset=True)
 # 1. CONFIGURATION
 # ==========================================
 CONFIG = {
-    "d_model": 256,           # Keeping it thin to fit in Laptop RAM
-    "n_layers": 24,           # <--- THE CHANGE
-    "vocab_size": 256,
-    "seq_len": 512,           
+    "d_model": 384,           # Increased width for better English understanding
+    "n_layers": 32,           # Deep architecture for complex patterns
+    "vocab_size": 256,        # Byte-level encoding (correct for UTF-8)
+    "seq_len": 768,           # Longer context for better comprehension
     
     # Speed Adjustments
-    "batch_size": 8,          # Keep small
-    "accumulate_grad": 4,     # Increase accumulation to stabilize the deep gradients
+    "batch_size": 6,          # Slightly reduced for larger model
+    "accumulate_grad": 6,     # Increased accumulation for stability
     
-    # CRITICAL CHANGE: Lower Learning Rate
-    # Deep networks are unstable. Lowering LR prevents "exploding gradients".
-    "learning_rate": 4e-4,    # Was 6e-4
-    "max_steps": 8000,        # Needs more time to propagate signal 24 layers deep
+    # Optimized Learning Rate for deeper network
+    "learning_rate": 3e-4,    # Lower LR for 32-layer stability
+    "max_steps": 15000,       # More steps for comprehensive training
     
+    # Warmup and scheduler
+    "warmup_steps": 500,      # Gradual learning rate warmup
+    "weight_decay": 0.01,     # L2 regularization
 
     # --- DATASET SETTINGS ---
-    "dataset_name": "wikimedia/wikipedia", 
-    "dataset_config": "20231101.bg",
+    "dataset_name": "wikimedia/wikipedia",
+    "dataset_config": "20231101.en",  # English Wikipedia
     
-    # NEW: Specific columns to process (Comma separated)
-    # If you set this to None, it uses ALL text columns.
+    # Specific columns to process (Comma separated)
     "dataset_columns": "title, text",
+    
+    # Dataset size
+    "max_samples": 100000,    # More samples for better training
 
-    "save_path": "hope_bg_deep.pth"
+    "save_path": "hope_en_deep.pth"
 }
 
 DEVICE = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
@@ -244,7 +248,20 @@ def draw_dashboard(step, max_steps, loss, speed, eta, columns, preview_text):
 def train():
     # Setup
     model = HOPE(CONFIG['vocab_size'], CONFIG['d_model'], CONFIG['n_layers']).to(DEVICE)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=CONFIG['learning_rate'])
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=CONFIG['learning_rate'],
+        weight_decay=CONFIG.get('weight_decay', 0.01)
+    )
+    
+    # Learning rate scheduler with warmup
+    def get_lr(step):
+        warmup_steps = CONFIG.get('warmup_steps', 500)
+        if step < warmup_steps:
+            return step / warmup_steps
+        return max(0.1, 1.0 - (step - warmup_steps) / (CONFIG['max_steps'] - warmup_steps))
+    
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, get_lr)
     
     # Resume Logic
     start_step = 0
@@ -253,15 +270,20 @@ def train():
         if isinstance(checkpoint, dict) and 'model_state' in checkpoint:
             model.load_state_dict(checkpoint['model_state'])
             start_step = checkpoint['step']
+            if 'optimizer_state' in checkpoint:
+                optimizer.load_state_dict(checkpoint['optimizer_state'])
+            if 'scheduler_state' in checkpoint:
+                scheduler.load_state_dict(checkpoint['scheduler_state'])
         else:
             model.load_state_dict(checkpoint)
 
     # Data
     dataset = SmartTextDataset(
-        CONFIG['dataset_name'], 
-        CONFIG['dataset_config'], 
+        CONFIG['dataset_name'],
+        CONFIG['dataset_config'],
         CONFIG['seq_len'],
-        target_columns=CONFIG.get('dataset_columns') # <--- NEW ARGUMENT
+        target_columns=CONFIG.get('dataset_columns'),
+        max_samples=CONFIG.get('max_samples', 50000)
     )
     
     loader = DataLoader(dataset, batch_size=CONFIG['batch_size'])
@@ -313,7 +335,8 @@ def train():
                 scaler.update()
             else:
                 optimizer.step()
-                
+            
+            scheduler.step()  # Update learning rate
             step += 1
             
             # --- UPDATE DASHBOARD (Every 0.2s to prevent flicker) ---
@@ -342,7 +365,12 @@ def train():
         pass # Handle save below
     
     print(f"\n{Fore.GREEN}Saving to {CONFIG['save_path']}...{Style.RESET_ALL}")
-    checkpoint_data = {'model_state': model.state_dict(), 'step': step}
+    checkpoint_data = {
+        'model_state': model.state_dict(),
+        'step': step,
+        'optimizer_state': optimizer.state_dict(),
+        'scheduler_state': scheduler.state_dict()
+    }
     torch.save(checkpoint_data, CONFIG['save_path'])
     print("Done.")
 
