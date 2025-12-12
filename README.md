@@ -65,9 +65,9 @@ Bash
 
     python train_hope.py
 
-Default Dataset: Wikipedia (Bulgarian/English configurable in script).
+Default Dataset: English Wikipedia (20231101.en).
 
-Output: Saves a "brain" file to hope_bg_wiki.pth.
+Output: Saves a "brain" file to hope_en_deep.pth.
 
 Dashboard: Shows real-time Loss, Speed (tok/s), and a Live Data Preview.
 
@@ -99,15 +99,26 @@ You can tweak the model size in train_hope.py by modifying the CONFIG dictionary
 Python
 
 CONFIG = {
-    "d_model": 256,       # Width (Keep small for laptops)
-    "n_layers": 12,       # Depth (Higher = Smarter but slower)
-    "seq_len": 512,       # Context Window
+    "d_model": 384,       # Width (Increased for better understanding)
+    "n_layers": 32,       # Depth (Deep architecture for complex patterns)
+    "seq_len": 768,       # Context Window (Longer for better comprehension)
     "vocab_size": 256,    # Byte-Level (No tokenizer needed!)
+    "max_steps": 15000,   # Training steps
+    "learning_rate": 3e-4,# Optimized for deep networks
+    "warmup_steps": 500,  # Learning rate warmup
 }
 
-    Nano Mode: d_model=256, n_layers=4 (Fastest, good for testing)
+**Preset Configurations:**
 
-    Thin & Deep: d_model=256, n_layers=12 (Best for logic/grammar on laptops)
+- **Nano Mode**: d_model=256, n_layers=4, seq_len=512 (Fastest, good for testing)
+- **Balanced**: d_model=256, n_layers=12, seq_len=512 (Good for laptops)
+- **Deep (Default)**: d_model=384, n_layers=32, seq_len=768 (Best quality, requires 16GB RAM)
+
+**Enhanced Features:**
+- ✅ Learning rate warmup for stable training
+- ✅ Gradient accumulation for effective larger batch sizes
+- ✅ Automatic checkpoint saving with optimizer state
+- ✅ Real-time training dashboard with live data preview
 
 📜 Credits & Citation
 
