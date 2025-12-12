@@ -84,7 +84,7 @@ def load_model(path):
         print(f"Error details: {e}")
         sys.exit(1)
 
-def generate_response(model, prompt, max_new_tokens=100, temperature=0.6):
+def generate_response(model, prompt, max_new_tokens=150, temperature=0.7):
     # 1. Encode Prompt
     input_ids = list(prompt.encode('utf-8'))
     x = torch.tensor([input_ids], dtype=torch.long).to(DEVICE)
@@ -125,7 +125,7 @@ def generate_response(model, prompt, max_new_tokens=100, temperature=0.6):
             continue
             
         # 2. Add to buffer and try to decode
-        byte_buffer.append(token_int)
+        byte_buffer.append(int(token_int))  # Ensure it's an int, not a tensor
         
         try:
             # Try to decode the WHOLE buffer
@@ -147,7 +147,8 @@ def generate_response(model, prompt, max_new_tokens=100, temperature=0.6):
     return bytes(generated_bytes).decode('utf-8', errors='ignore')
 
 def main():
-    model_path = CONFIG['save_path']
+    # Use the English model path
+    model_path = CONFIG['save_path']  # Will use hope_en_deep.pth from CONFIG
     
     # 1. Load
     model = load_model(model_path)
