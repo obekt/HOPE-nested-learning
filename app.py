@@ -7,7 +7,7 @@ import sys
 from train_hope import HOPE, CONFIG, DEVICE
 
 # --- CONFIGURATION ---
-MODEL_FILENAME = "hope_bg_deep.pth" 
+MODEL_FILENAME = "hope_en_deep.pth"  # Updated for English model
 
 print(f"Loading HOPE Model from {MODEL_FILENAME}...")
 
@@ -80,10 +80,14 @@ def predict(message, history):
 # --- LAUNCH UI ---
 demo = gr.ChatInterface(
     predict,
-    title="HOPE: Nested Learning Chat",
+    title="HOPE: Nested Learning Chat (English)",
     description=f"Running {MODEL_FILENAME} on {DEVICE}",
-    examples=["Здравей", "Какво е това?", "Разкажи ми история"]
-    # REMOVED: type="messages" to fix compatibility error
+    examples=[
+        "Hello, how are you?",
+        "What is artificial intelligence?",
+        "Tell me a story about a robot.",
+        "Explain quantum computing in simple terms."
+    ]
 )
 
 if __name__ == "__main__":
