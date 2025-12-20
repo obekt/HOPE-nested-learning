@@ -8,6 +8,8 @@ import sys
 import os
 from datetime import timedelta
 from colorama import Fore, Style, init
+from sentence_transformers import SentenceTransformer
+from transformers import AutoTokenizer
 
 # Initialize color output
 init(autoreset=True)
@@ -16,34 +18,30 @@ init(autoreset=True)
 # 1. CONFIGURATION
 # ==========================================
 CONFIG = {
-    "d_model": 384,           # Increased width for better English understanding
-    "n_layers": 32,           # Deep architecture for complex patterns
-    "vocab_size": 256,        # Byte-level encoding (correct for UTF-8)
-    "seq_len": 768,           # Longer context for better comprehension
+    "granite_model": "ibm-granite/granite-embedding-small-english-r2",
+    "d_model": 384,           # Dimension of Granite-small
+    "n_layers": 32,           # Fast Memory layers
+    "seq_len": 512,           # Adjusted for Granite transformer
     
     # Speed Adjustments
-    "batch_size": 6,          # Slightly reduced for larger model
-    "accumulate_grad": 6,     # Increased accumulation for stability
+    "batch_size": 4,          
+    "accumulate_grad": 8,     
     
-    # Optimized Learning Rate for deeper network
-    "learning_rate": 3e-4,    # Lower LR for 32-layer stability
-    "max_steps": 15000,       # More steps for comprehensive training
+    # Optimized Learning Rate
+    "learning_rate": 2e-4,    
+    "max_steps": 10000,       
     
     # Warmup and scheduler
-    "warmup_steps": 500,      # Gradual learning rate warmup
-    "weight_decay": 0.01,     # L2 regularization
+    "warmup_steps": 500,      
+    "weight_decay": 0.01,     
 
     # --- DATASET SETTINGS ---
     "dataset_name": "wikimedia/wikipedia",
-    "dataset_config": "20231101.en",  # English Wikipedia
-    
-    # Specific columns to process (Comma separated)
+    "dataset_config": "20231101.en",  
     "dataset_columns": "title, text",
-    
-    # Dataset size
-    "max_samples": 100000,    # More samples for better training
+    "max_samples": 50000,    
 
-    "save_path": "hope_en_deep.pth"
+    "save_path": "hope_granite_hybrid.pth"
 }
 
 DEVICE = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
@@ -63,24 +61,38 @@ class SelfModifyingLayer(nn.Module):
         self.decay_param = nn.Parameter(torch.tensor(0.0)) # Logits for sigmoid
 
     def forward(self, x):
+        batch_size, seq_len, dim = x.shape
         q, k, v = self.proj_q(x), self.proj_k(x), self.proj_v(x)
         k = F.elu(k) + 1.0 
-        batch_size, seq_len, _ = x.shape
-        outputs = []
-        memory = torch.zeros(batch_size, self.dim, self.dim).to(x.device)
+        decay_value = torch.sigmoid(self.decay_param)
+        
+        # JIT-compiled recurrent loop for stability and speed
+        # This replaces the numerically unstable power-based vectorization
+        out = self._recurrent_forward(q, k, v, decay_value)
+        
+        return self.proj_out(out)
+
+    @torch.jit.export
+    def _recurrent_forward(self, q, k, v, decay):
+        # type: (Tensor, Tensor, Tensor, Tensor) -> Tensor
+        batch_size, seq_len, dim = q.shape
+        memory = torch.zeros(batch_size, dim, dim, device=q.device, dtype=q.dtype)
+        outputs = torch.zeros_like(q)
         
         for t in range(seq_len):
-            q_t = q[:, t, :].unsqueeze(1)
-            k_t = k[:, t, :].unsqueeze(1)
-            v_t = v[:, t, :].unsqueeze(1)
-            read_out = torch.bmm(q_t, memory) 
-            update = torch.bmm(k_t.transpose(1, 2), v_t)
-            decay_value = torch.sigmoid(self.decay_param) 
-            memory = decay_value * memory + update
-            outputs.append(read_out)
+            q_t = q[:, t, :].unsqueeze(1) # [B, 1, D]
+            k_t = k[:, t, :].unsqueeze(1) # [B, 1, D]
+            v_t = v[:, t, :].unsqueeze(1) # [B, 1, D]
             
-        out = torch.cat(outputs, dim=1)
-        return self.proj_out(out)
+            # Read out from memory
+            read_out = torch.bmm(q_t, memory) # [B, 1, D]
+            outputs[:, t, :] = read_out.squeeze(1)
+            
+            # Update memory
+            update = torch.bmm(k_t.transpose(1, 2), v_t) # [B, D, D]
+            memory = decay * memory + update
+            
+        return outputs
 
 class ContinuumMemoryBlock(nn.Module):
     def __init__(self, dim, expansion=4):
@@ -97,22 +109,39 @@ class ContinuumMemoryBlock(nn.Module):
         return self.norm(x + self.net(x))
 
 class HOPE(nn.Module):
-    def __init__(self, vocab_size, d_model, n_layers):
+    def __init__(self, granite_model_name, d_model, n_layers):
         super().__init__()
-        self.embedding = nn.Embedding(vocab_size, d_model)
+        print(f"Loading Granite Backbone: {granite_model_name}...")
+        self.granite = SentenceTransformer(granite_model_name)
+        
+        # Freeze Granite weights (Slow Memory)
+        for param in self.granite.parameters():
+            param.requires_grad = False
+            
         self.fast_memory = SelfModifyingLayer(d_model)
         self.norm_fast = nn.LayerNorm(d_model)
         self.cms_layers = nn.ModuleList([
             ContinuumMemoryBlock(d_model) for _ in range(n_layers)
         ])
+        
+        # Prediction head: predicts next token in Granite's vocab
+        vocab_size = self.granite.tokenizer.vocab_size
         self.head = nn.Linear(d_model, vocab_size)
 
-    def forward(self, x):
-        h = self.embedding(x)
-        fast_out = self.fast_memory(h)
-        h = self.norm_fast(h + fast_out)
+    def forward(self, tokens_dict):
+        # 1. Get static embeddings from IBM Granite (Slow Memory)
+        with torch.no_grad():
+            outputs = self.granite[0](tokens_dict)
+            slow_embeddings = outputs['token_embeddings'] # (Batch, Seq, 384)
+            
+        # 2. Pass through Fast Memory (Real-time adaptation)
+        fast_out = self.fast_memory(slow_embeddings)
+        h = self.norm_fast(slow_embeddings + fast_out)
+        
+        # 3. Continuum Memory Layers
         for layer in self.cms_layers:
             h = layer(h)
+            
         return self.head(h)
 
 # ==========================================
@@ -124,6 +153,9 @@ class SmartTextDataset(IterableDataset):
         self.seq_len = seq_len
         self.max_samples = max_samples
         self.detected_columns = []
+        
+        # Load tokenizer once
+        self.tokenizer = AutoTokenizer.from_pretrained(CONFIG['granite_model'], model_max_length=100000)
         
         # Parse the user's column preference
         self.target_columns = None
@@ -180,10 +212,17 @@ class SmartTextDataset(IterableDataset):
                 item = next(iterator)
                 text = self._process_item(item)
                 
-                if not text or len(text) < 50: 
+                if not text or len(text) < 100: 
                     continue 
                 
-                tokens = list(text.encode('utf-8'))
+                # Use Granite tokenizer with truncation to avoid warnings on huge docs
+                tokens = self.tokenizer.encode(
+                    text, 
+                    add_special_tokens=False, 
+                    truncation=True, 
+                    max_length=8192 # Respect model's absolute limit
+                )
+                
                 for i in range(0, len(tokens) - self.seq_len, self.seq_len):
                     chunk = tokens[i : i + self.seq_len + 1]
                     if len(chunk) == self.seq_len + 1:
@@ -202,12 +241,12 @@ class SmartTextDataset(IterableDataset):
 def format_time(seconds):
     return str(timedelta(seconds=int(seconds)))
 
-def decode_preview(tensor):
+def decode_preview(tensor, tokenizer):
     try:
-        # Decode first item in batch, first 100 characters
-        tokens = tensor[0].tolist()[:100] 
-        text = bytes(tokens).decode('utf-8', errors='ignore')
-        return text.replace('\n', ' ') # Remove newlines to keep dashboard stable
+        # Decode first item in batch, first 20 tokens
+        tokens = tensor[0].tolist()[:20] 
+        text = tokenizer.decode(tokens)
+        return text.replace('\n', ' ') 
     except:
         return "..."
 
@@ -247,7 +286,7 @@ def draw_dashboard(step, max_steps, loss, speed, eta, columns, preview_text):
 
 def train():
     # Setup
-    model = HOPE(CONFIG['vocab_size'], CONFIG['d_model'], CONFIG['n_layers']).to(DEVICE)
+    model = HOPE(CONFIG['granite_model'], CONFIG['d_model'], CONFIG['n_layers']).to(DEVICE)
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=CONFIG['learning_rate'],
@@ -312,20 +351,34 @@ def train():
                     iter_loader = iter(loader) 
                     batch = next(iter_loader)
                 
-                inputs = batch[:, :-1].to(DEVICE)
+                inputs_ids = batch[:, :-1].to(DEVICE)
                 targets = batch[:, 1:].to(DEVICE)
                 
-                # Capture text for dashboard
-                current_preview = decode_preview(inputs)
+                # Construct tokens_dict for Granite
+                # We reuse input_ids as token_embeddings input
+                tokens_dict = {
+                    'input_ids': inputs_ids,
+                    'attention_mask': torch.ones_like(inputs_ids).to(DEVICE)
+                }
                 
-                if scaler:
-                    with torch.cuda.amp.autocast():
-                        logits = model(inputs)
-                        loss = F.cross_entropy(logits.reshape(-1, CONFIG['vocab_size']), targets.reshape(-1))
-                    scaler.scale(loss).backward()
+                # Capture text for dashboard
+                current_preview = decode_preview(inputs_ids, model.granite.tokenizer)
+                
+                # Mixed precision context
+                autocast_device = "cuda" if DEVICE == "cuda" else "mps" if DEVICE == "mps" else None
+                
+                if autocast_device:
+                    with torch.autocast(device_type=autocast_device):
+                        logits = model(tokens_dict)
+                        loss = F.cross_entropy(logits.reshape(-1, model.head.out_features), targets.reshape(-1))
+                    
+                    if scaler:
+                        scaler.scale(loss).backward()
+                    else:
+                        loss.backward()
                 else:
-                    logits = model(inputs)
-                    loss = F.cross_entropy(logits.reshape(-1, CONFIG['vocab_size']), targets.reshape(-1))
+                    logits = model(tokens_dict)
+                    loss = F.cross_entropy(logits.reshape(-1, model.head.out_features), targets.reshape(-1))
                     loss.backward()
                 
                 running_loss += loss.item()
