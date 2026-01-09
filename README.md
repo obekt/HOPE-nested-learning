@@ -21,6 +21,7 @@ Standard Large Language Models (LLMs) suffer from **"Anterograde Amnesia"**—on
 * **🕰️ Continuum Memory System (CMS):** A hierarchy of layers that update at different frequencies (Fast, Medium, Slow), mimicking the human brain's memory consolidation.
 * **⚡ Ultra-Lightweight:** Designed to run on **Consumer Hardware** (Mac M1/M2/M3, NVIDIA RTX 3060+, or even CPU).
 * **🔄 Continual Learning:** Capable of training on Dataset A, then Dataset B, without instantly forgetting Dataset A.
+* **📱 Consumer Device Ready:** While training requires high RAM (16GB+), the **trained brain** uses <1GB RAM for inference, making it capable of running on standard laptops, tablets, or even smartphones.
 
 ---
 
@@ -115,24 +116,30 @@ HOPE is natively designed for catastrophic-forgetting-free fine-tuning.
 
 ## 🧪 Configuration
 
-You can tweak the model size in `train_hope.py` by modifying the `CONFIG` dictionary:
+The project is currently tuned for a **~154M Parameter "Ultra Brain"** optimized for 32GB RAM. You can tweak the model size in `train_hope.py` by modifying the `CONFIG` dictionary:
 
 ```python
 CONFIG = {
-    "d_model": 384,       # Width (Increased for better understanding)
-    "n_layers": 32,       # Depth (Deep architecture for complex patterns)
-    "seq_len": 768,       # Context Window (Longer for better comprehension)
+    "d_model": 768,       # Width (Determines "IQ" and Reasoning capability)
+    "n_layers": 32,       # Depth (32-layer deep hierarchy)
+    "seq_len": 512,       # Context Window (Training window)
     "vocab_size": 256,    # Byte-Level (No tokenizer needed!)
-    "max_steps": 15000,   # Training steps
-    "learning_rate": 3e-4,# Optimized for deep networks
-    "warmup_steps": 500,  # Learning rate warmup
+    "max_steps": 40000,   # Training saturation point
+    "learning_rate": 2e-4,# Optimized for large-scale stability
 }
 ```
 
-**Preset Configurations:**
-- **Nano Mode**: d_model=256, n_layers=4, seq_len=512 (Fastest, good for testing)
-- **Balanced**: d_model=256, n_layers=12, seq_len=512 (Good for laptops)
-- **Deep (Default)**: d_model=384, n_layers=32, seq_len=768 (Best quality, requires 16GB RAM)
+### 🧠 Performance & RAM Specs
+One of the key strengths of this architecture is its efficiency during use:
+
+*   **Training (`train_hope.py`):** Uses ~16GB - 22GB RAM. It requires high memory because it must store a "history" of the model's memory state for every character in the sequence to calculate gradients.
+*   **Inference (`chat.py` / `app.py`):** Uses < 1GB RAM. Because of our **Fast State-Passing** optimization, the model only needs to remember its current state, making it incredibly lightweight for daily use.
+
+### Preset Configurations:
+- **Nano**: `d_model=256, n_layers=4` (Fastest, ~10M params)
+- **Balanced**: `d_model=384, n_layers=12` (~50M params)
+- **Deep**: `d_model=384, n_layers=32` (~100M params)
+- **Ultra (Default)**: `d_model=768, n_layers=32` (~154M params, high-end Mac/PC)
 
 ---
 

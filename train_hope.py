@@ -16,34 +16,30 @@ init(autoreset=True)
 # 1. CONFIGURATION
 # ==========================================
 CONFIG = {
-    "d_model": 384,           # Increased width for better English understanding
-    "n_layers": 32,           # Deep architecture for complex patterns
-    "vocab_size": 256,        # Byte-level encoding (correct for UTF-8)
-    "seq_len": 768,           # Longer context for better comprehension
+    "d_model": 768,           # Keeping the Massive IQ
+    "n_layers": 32,           
+    "vocab_size": 256,        
+    "seq_len": 512,           # Lowered to 512 to fit state-history in 32GB RAM
     
-    # Speed Adjustments
-    "batch_size": 6,          # Slightly reduced for larger model
-    "accumulate_grad": 6,     # Increased accumulation for stability
+    # Precision Scaling for 32GB
+    "batch_size": 4,          # Lowered to prevent OOM
+    "accumulate_grad": 12,    # Effective batch of 48 (4 * 12)
     
-    # Optimized Learning Rate for deeper network
-    "learning_rate": 3e-4,    # Lower LR for 32-layer stability
-    "max_steps": 15000,       # More steps for comprehensive training
+    # Training Parameters
+    "learning_rate": 2e-4,    
+    "max_steps": 40000,       # More steps because chunks are smaller
     
-    # Warmup and scheduler
-    "warmup_steps": 500,      # Gradual learning rate warmup
-    "weight_decay": 0.01,     # L2 regularization
+    # Robust Regularization
+    "warmup_steps": 1500,     
+    "weight_decay": 0.05,     
 
     # --- DATASET SETTINGS ---
     "dataset_name": "wikimedia/wikipedia",
-    "dataset_config": "20231101.en",  # English Wikipedia
-    
-    # Specific columns to process (Comma separated)
+    "dataset_config": "20231101.en", 
     "dataset_columns": "title, text",
-    
-    # Dataset size
-    "max_samples": 100000,    # More samples for better training
+    "max_samples": 400000,    
 
-    "save_path": "hope_en_deep.pth"
+    "save_path": "hope_x_pro.pth" 
 }
 
 DEVICE = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
