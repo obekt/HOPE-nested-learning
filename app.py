@@ -45,48 +45,57 @@ def decode_tokens(tokens):
     """Helper to convert list of numbers to string"""
     return bytes(tokens).decode('utf-8', errors='ignore')
 
-def predict(message, history):
-    # Note: 'history' is passed by Gradio but we aren't using it in this simple version
-    # If you want memory, you would concatenate history string here.
-    
+def predict(message, history, temperature, max_tokens):
+    if not message.strip():
+        return
+        
     # 1. Encode Input
     input_ids = list(message.encode('utf-8'))
     x = torch.tensor([input_ids], dtype=torch.long).to(DEVICE)
     
     generated_ids = []
     
-    # 2. Generation Loop
-    for _ in range(200): # Max 200 tokens
-        with torch.no_grad():
-            logits = model(x)
-            
-        # Sampling
-        last_token_logits = logits[:, -1, :]
-        # Temperature control (hardcoded to 0.6 for stability)
-        probs = torch.softmax(last_token_logits / 0.6, dim=-1)
-        next_token = torch.multinomial(probs, num_samples=1)
+    # First Pass: Process the whole prompt to build initial state
+    with torch.no_grad():
+        logits, state = model(x)
         
-        # Append
-        x = torch.cat((x, next_token), dim=1)
+    last_token_logits = logits[:, -1, :] / max(0.01, temperature)
+    probs = torch.softmax(last_token_logits, dim=-1)
+    next_token = torch.multinomial(probs, num_samples=1)
+        
+    # 2. Optimized Generation Loop
+    for _ in range(max_tokens):
         token_int = next_token.item()
-        
         if token_int == 0: break # Stop token
         
         generated_ids.append(token_int)
         
         # Stream output to UI
         yield decode_tokens(generated_ids)
+        
+        # Fast update with state!
+        with torch.no_grad():
+            x = next_token 
+            logits, state = model(x, state=state)
+            
+        last_token_logits = logits[:, -1, :] / max(0.01, temperature)
+        probs = torch.softmax(last_token_logits, dim=-1)
+        next_token = torch.multinomial(probs, num_samples=1)
 
 # --- LAUNCH UI ---
 demo = gr.ChatInterface(
     predict,
+    additional_inputs=[
+        gr.Slider(minimum=0.1, maximum=1.5, value=0.7, step=0.1, label="Temperature (Creativity)"),
+        gr.Slider(minimum=50, maximum=1000, value=300, step=50, label="Max Tokens (Length)")
+    ],
     title="HOPE: Nested Learning Chat (English)",
     description=f"Running {MODEL_FILENAME} on {DEVICE}",
     examples=[
-        "Hello, how are you?",
-        "What is artificial intelligence?",
-        "Tell me a story about a robot.",
-        "Explain quantum computing in simple terms."
+        ["Hello, how are you?", 0.7, 300],
+        ["What is artificial intelligence?", 0.7, 300],
+        ["Tell me a story about a robot.", 0.7, 300],
+        ["Explain quantum computing in simple terms.", 0.7, 300]
     ]
 )
 

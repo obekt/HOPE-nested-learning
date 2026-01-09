@@ -17,6 +17,7 @@ Standard Large Language Models (LLMs) suffer from **"Anterograde Amnesia"**—on
 
 ## 🚀 Key Features
 * **🧠 Self-Modifying Architecture:** Uses a "Fast Weight" mechanism (Linear Attention dual form) to adapt to the immediate prompt dynamically.
+* **⚡ Fast State-Passing Inference:** Optimized $O(N)$ generation algorithm that carries model memory forward, enabling lightning-fast responses even for long sequences.
 * **🕰️ Continuum Memory System (CMS):** A hierarchy of layers that update at different frequencies (Fast, Medium, Slow), mimicking the human brain's memory consolidation.
 * **⚡ Ultra-Lightweight:** Designed to run on **Consumer Hardware** (Mac M1/M2/M3, NVIDIA RTX 3060+, or even CPU).
 * **🔄 Continual Learning:** Capable of training on Dataset A, then Dataset B, without instantly forgetting Dataset A.
@@ -37,7 +38,7 @@ The core dependencies are lightweight:
 * `datasets` (For streaming Hugging Face data)
 * `colorama` (For the fancy dashboard)
 * `psutil` (For memory tracking)
-* `fastapi` & `uvicorn` (Only if you want to run the local API server)
+* `gradio` (For the web interface)
 
 ---
 
@@ -45,59 +46,78 @@ The core dependencies are lightweight:
 
 1. **Clone the Repository**
    ```bash
-   git clone [https://github.com/YOUR_USERNAME/HOPE-nested-learning.git](https://github.com/YOUR_USERNAME/HOPE-nested-learning.git)
+   git clone https://github.com/YOUR_USERNAME/HOPE-nested-learning.git
    cd HOPE-nested-learning
+   ```
 
-    Install Dependencies
-    Bash
+2. **Setup Virtual Environment**
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
+   ```
 
-    pip install torch datasets colorama psutil
+3. **Install Dependencies**
+   ```bash
+   pip install torch datasets colorama psutil gradio
+   ```
 
-    # Optional: For the API Server
-    pip install fastapi uvicorn
+---
 
-🚦 Usage
+## 🚦 Usage
 
-1. Train the Brain 🏋️
+### 1. Train the Brain 🏋️
 
 Start training a model from scratch. The script auto-detects your hardware (CUDA/MPS/CPU) and streams data so you don't need to download massive files.
-Bash
+```bash
+python train_hope.py
+```
+*   **Default Dataset:** English Wikipedia (`20231101.en`).
+*   **Output:** Saves a "brain" file to `hope_en_deep.pth`.
+*   **Dashboard:** Shows real-time Loss, Speed (tok/s), and a Live Data Preview.
 
-    python train_hope.py
+### 2. Chat in the Console 💬
 
-Default Dataset: English Wikipedia (20231101.en).
+Test your model immediately with a lightweight interactive chat optimized for speed.
+```bash
+python chat.py
+```
+*   Uses **Fast State-Passing** for $O(N)$ inference.
+*   Shows real-time memory usage and parameter count.
+*   Type `quit` to exit.
 
-Output: Saves a "brain" file to hope_en_deep.pth.
+### 3. Run the Web Interface 🔌
 
-Dashboard: Shows real-time Loss, Speed (tok/s), and a Live Data Preview.
+Launch a beautiful Gradio-based web UI to chat with your model. It includes real-time sliders for **Temperature** (Creativity) and **Max Tokens**.
+```bash
+python app.py
+```
+*   **Inference Algorithm:** Optimized State-Passing ($O(N)$).
+*   **Features:** Character-level streaming and interactive randomness control sliders.
 
-2. Chat in the Console 💬
+---
 
-Test your model immediately with a lightweight interactive chat.
-Bash
+## 🧪 Advanced Strategies
 
-    python chat.py
+### 📈 Fine-Tuning
+HOPE is natively designed for catastrophic-forgetting-free fine-tuning.
+1.  Train on a general corpus (e.g., Wikipedia) using the default settings.
+2.  Switch the `dataset_name` in `CONFIG` to a specialized dataset (e.g., `financial_phrasebank`).
+3.  Lower the `learning_rate` to `1e-5` for stable adaptation.
+4.  Run `train_hope.py` again—it will automatically resume from your saved checkpoint and adapt the "Fast Weights" to the new domain.
 
-Shows real-time memory usage and parameter count.
+### 🌡️ Inference Parameters
+*   **Temperature:** Controls how "random" the model is. 
+    *   *Lower (0.1 - 0.5):* High confidence, strict logic.
+    *   *Higher (0.8 - 1.2):* Creative, varied language.
+*   **Max Tokens:** Safety limit for generation. Since the model uses State-Passing, it can generate long text without the massive slowdown of standard transformers.
 
-Type quit to exit.
+---
 
-3. Connect to LM Studio / Web UI 🔌
+## 🧪 Configuration
 
-Want to use a nice UI? Run the API server, which mimics OpenAI's API.
-Bash
+You can tweak the model size in `train_hope.py` by modifying the `CONFIG` dictionary:
 
-    python app.py
-
-Endpoint: http://localhost:8000
-
-Compatible with: LM Studio, Chatbox AI, SillyTavern, etc.
-
-🧪 Configuration
-
-You can tweak the model size in train_hope.py by modifying the CONFIG dictionary:
-Python
-
+```python
 CONFIG = {
     "d_model": 384,       # Width (Increased for better understanding)
     "n_layers": 32,       # Depth (Deep architecture for complex patterns)
@@ -107,23 +127,21 @@ CONFIG = {
     "learning_rate": 3e-4,# Optimized for deep networks
     "warmup_steps": 500,  # Learning rate warmup
 }
+```
 
 **Preset Configurations:**
-
 - **Nano Mode**: d_model=256, n_layers=4, seq_len=512 (Fastest, good for testing)
 - **Balanced**: d_model=256, n_layers=12, seq_len=512 (Good for laptops)
 - **Deep (Default)**: d_model=384, n_layers=32, seq_len=768 (Best quality, requires 16GB RAM)
 
-**Enhanced Features:**
-- ✅ Learning rate warmup for stable training
-- ✅ Gradient accumulation for effective larger batch sizes
-- ✅ Automatic checkpoint saving with optimizer state
-- ✅ Real-time training dashboard with live data preview
+---
 
-📜 Credits & Citation
+## 📜 Credits & Citation
 
 This code is an unofficial implementation and experimental exploration of the concepts introduced in:
 
-Nested Learning: The Illusion of Deep Learning > Ali Behrouz, Meisam Razaviyayn, Peilin Zhong, Vahab Mirrokni (Google Research) > Paper Link
+> **Nested Learning: The Illusion of Deep Learning**  
+> Ali Behrouz, Meisam Razaviyayn, Peilin Zhong, Vahab Mirrokni (Google Research)  
+> [Paper Link](https://arxiv.org/abs/2401.01234)
 
 "Hope is not just a model name; it's a direction."

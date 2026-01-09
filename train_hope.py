@@ -62,13 +62,19 @@ class SelfModifyingLayer(nn.Module):
         self.proj_out = nn.Linear(dim, dim)
         self.decay_param = nn.Parameter(torch.tensor(0.0)) # Logits for sigmoid
 
-    def forward(self, x):
+    def forward(self, x, state=None):
         q, k, v = self.proj_q(x), self.proj_k(x), self.proj_v(x)
         k = F.elu(k) + 1.0 
         batch_size, seq_len, _ = x.shape
         outputs = []
-        memory = torch.zeros(batch_size, self.dim, self.dim).to(x.device)
         
+        # Use provided state or initialize new memory
+        memory = state if state is not None else torch.zeros(batch_size, self.dim, self.dim).to(x.device)
+        
+        if seq_len == 0:
+            return torch.zeros_like(x), memory
+
+        outputs = []
         for t in range(seq_len):
             q_t = q[:, t, :].unsqueeze(1)
             k_t = k[:, t, :].unsqueeze(1)
@@ -80,7 +86,7 @@ class SelfModifyingLayer(nn.Module):
             outputs.append(read_out)
             
         out = torch.cat(outputs, dim=1)
-        return self.proj_out(out)
+        return self.proj_out(out), memory
 
 class ContinuumMemoryBlock(nn.Module):
     def __init__(self, dim, expansion=4):
@@ -107,13 +113,13 @@ class HOPE(nn.Module):
         ])
         self.head = nn.Linear(d_model, vocab_size)
 
-    def forward(self, x):
+    def forward(self, x, state=None):
         h = self.embedding(x)
-        fast_out = self.fast_memory(h)
+        fast_out, new_state = self.fast_memory(h, state=state)
         h = self.norm_fast(h + fast_out)
         for layer in self.cms_layers:
             h = layer(h)
-        return self.head(h)
+        return self.head(h), new_state
 
 # ==========================================
 # 3. ROBUST DATASET (Strict Filter + Dashboard Fix)
@@ -320,11 +326,11 @@ def train():
                 
                 if scaler:
                     with torch.cuda.amp.autocast():
-                        logits = model(inputs)
+                        logits, _ = model(inputs) # Ignore state during training
                         loss = F.cross_entropy(logits.reshape(-1, CONFIG['vocab_size']), targets.reshape(-1))
                     scaler.scale(loss).backward()
                 else:
-                    logits = model(inputs)
+                    logits, _ = model(inputs) # Ignore state during training
                     loss = F.cross_entropy(logits.reshape(-1, CONFIG['vocab_size']), targets.reshape(-1))
                     loss.backward()
                 

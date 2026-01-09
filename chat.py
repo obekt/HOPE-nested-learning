@@ -84,64 +84,61 @@ def load_model(path):
         print(f"Error details: {e}")
         sys.exit(1)
 
-def generate_response(model, prompt, max_new_tokens=150, temperature=0.7):
-    # 1. Encode Prompt
+def generate_response(model, prompt, max_new_tokens=250, temperature=0.7):
+    # 1. First Pass: Process the whole prompt to build initial state
     input_ids = list(prompt.encode('utf-8'))
     x = torch.tensor([input_ids], dtype=torch.long).to(DEVICE)
     
     print(f"\n{Fore.CYAN}HOPE: {Style.RESET_ALL}", end="")
     
     generated_bytes = []
-    byte_buffer = bytearray() # <--- NEW: Buffer to hold incomplete parts of letters
+    byte_buffer = bytearray()
+    
+    with torch.no_grad():
+        # Build initial memory state from the prompt
+        logits, state = model(x)
+    
+    # Get the last character prediction from prompt
+    last_token_logits = logits[:, -1, :] / temperature
+    probs = F.softmax(last_token_logits, dim=-1)
+    next_token = torch.multinomial(probs, num_samples=1)
     
     for _ in range(max_new_tokens):
-        with torch.no_grad():
-            logits = model(x)
-        
-        last_token_logits = logits[:, -1, :] / temperature
-        probs = F.softmax(last_token_logits, dim=-1)
-        next_token = torch.multinomial(probs, num_samples=1)
-        
-        x = torch.cat((x, next_token), dim=1)
         token_int = next_token.item()
-        
         if token_int == 0: break 
         
         generated_bytes.append(token_int)
         
-        # --- SMART DECODING LOGIC ---
-        
-        # 1. Handle Control Codes immediately
+        # --- SMART DECODING & PRINTING ---
         if token_int == 32: # Space
-            # If we had half a letter waiting, it's garbage now, so print valid space
             byte_buffer.clear() 
             sys.stdout.write(" ")
-            sys.stdout.flush()
-            continue
         elif token_int == 10: # Newline
             byte_buffer.clear()
             sys.stdout.write("\n")
-            sys.stdout.flush()
-            continue
-            
-        # 2. Add to buffer and try to decode
-        byte_buffer.append(int(token_int))  # Ensure it's an int, not a tensor
+        else:
+            byte_buffer.append(int(token_int))
+            try:
+                decoded_char = byte_buffer.decode('utf-8')
+                sys.stdout.write(decoded_char)
+                byte_buffer.clear()
+            except UnicodeDecodeError:
+                pass
         
-        try:
-            # Try to decode the WHOLE buffer
-            decoded_char = byte_buffer.decode('utf-8')
+        sys.stdout.flush()
+        
+        # 2. Optimized Loop: Only pass the ONE new token plus the STATE
+        with torch.no_grad():
+            # x is now just the single next token
+            x = next_token # (batch=1, seq=1)
+            logits, state = model(x, state=state) # Pass state forward!
             
-            # If we are here, it worked! Print it.
-            sys.stdout.write(decoded_char)
-            sys.stdout.flush()
-            
-            # Clear buffer for next letter
-            byte_buffer.clear()
-            
-        except UnicodeDecodeError:
-            # This means we only have HALF a letter (e.g. byte 208 of 'з').
-            # Do nothing. Loop again and wait for the second half.
-            pass
+        last_token_logits = logits[:, -1, :] / temperature
+        probs = F.softmax(last_token_logits, dim=-1)
+        next_token = torch.multinomial(probs, num_samples=1)
+
+    print() # Final newline
+    return bytes(generated_bytes).decode('utf-8', errors='ignore')
 
     print() # Final newline
     return bytes(generated_bytes).decode('utf-8', errors='ignore')
