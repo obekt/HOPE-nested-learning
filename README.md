@@ -149,6 +149,4 @@ This code is an unofficial implementation and experimental exploration of the co
 
 > **Nested Learning: The Illusion of Deep Learning**  
 > Ali Behrouz, Meisam Razaviyayn, Peilin Zhong, Vahab Mirrokni (Google Research)  
-> [Paper Link](https://arxiv.org/abs/2401.01234)
-
-"Hope is not just a model name; it's a direction."
+> [Paper Link](https://abehrouz.github.io/files/NL.pdf)
