@@ -3,7 +3,6 @@ import torch.nn.functional as F
 import sys
 import os
 import psutil  # <--- NEW: For memory tracking
-import time
 from colorama import Fore, Style, init
 
 # Import from your training script
@@ -55,29 +54,22 @@ def load_model(path):
     print(f"{Fore.YELLOW}Loading model from {path}...{Style.RESET_ALL}")
     try:
         # 1. Create the empty architecture
-        model = HOPE(CONFIG['granite_model'], CONFIG['d_model'], CONFIG['n_layers'])
+        model = HOPE(CONFIG['vocab_size'], CONFIG['d_model'], CONFIG['n_layers'])
         
-        # 2. Load the file from disk (if exists, else it will just be the backbone)
-        if os.path.exists(path):
-            checkpoint = torch.load(path, map_location=DEVICE)
-            
-            # 3. INTELLIGENT UNPACKING
-            if isinstance(checkpoint, dict) and 'model_state' in checkpoint:
-                print(f"{Fore.CYAN}Detected Smart Checkpoint (includes training step). Unpacking...{Style.RESET_ALL}")
-                state_dict = checkpoint['model_state']
-            else:
-                state_dict = checkpoint
-                
-            # 4. Inject weights into model
-            model.load_state_dict(state_dict, strict=False)
+        # 2. Load the file from disk
+        checkpoint = torch.load(path, map_location=DEVICE)
+        
+        # 3. INTELLIGENT UNPACKING
+        # If we saved extra data (like step count), extract just the weights
+        if isinstance(checkpoint, dict) and 'model_state' in checkpoint:
+            print(f"{Fore.CYAN}Detected Smart Checkpoint (includes training step). Unpacking...{Style.RESET_ALL}")
+            state_dict = checkpoint['model_state']
         else:
-            print(f"{Fore.CYAN}No checkpoint found at {path}. Using raw Granite backbone + uninitialized HOPE layers.{Style.RESET_ALL}")        
+            state_dict = checkpoint # It's just the weights (Legacy format)
+
+        # 4. Inject weights into model
+        model.load_state_dict(state_dict, strict=False) 
         
-        # --- OPTIMIZATION: Use Half Precision (FP16) for Mac/MPS and CUDA ---
-        if DEVICE in ["mps", "cuda"]:
-            print(f"{Fore.YELLOW}Optimizing for GPU (Half Precision)...{Style.RESET_ALL}")
-            model = model.half()
-            
         model.to(DEVICE)
         model.eval()
         return model
@@ -93,25 +85,18 @@ def load_model(path):
         sys.exit(1)
 
 def generate_response(model, prompt, max_new_tokens=150, temperature=0.7):
-    # 1. Encode Prompt using Granite tokenizer
-    tokenizer = model.granite.tokenizer
-    input_ids = tokenizer.encode(prompt, add_special_tokens=False)
+    # 1. Encode Prompt
+    input_ids = list(prompt.encode('utf-8'))
     x = torch.tensor([input_ids], dtype=torch.long).to(DEVICE)
     
     print(f"\n{Fore.CYAN}HOPE: {Style.RESET_ALL}", end="")
     
-    generated_ids = []
-    start_time = time.time()
+    generated_bytes = []
+    byte_buffer = bytearray() # <--- NEW: Buffer to hold incomplete parts of letters
     
     for _ in range(max_new_tokens):
-        # Prepare tokens_dict for Granite-based forward pass
-        tokens_dict = {
-            'input_ids': x,
-            'attention_mask': torch.ones_like(x).to(DEVICE)
-        }
-        
-        with torch.inference_mode():
-            logits = model(tokens_dict)
+        with torch.no_grad():
+            logits = model(x)
         
         last_token_logits = logits[:, -1, :] / temperature
         probs = F.softmax(last_token_logits, dim=-1)
@@ -120,22 +105,46 @@ def generate_response(model, prompt, max_new_tokens=150, temperature=0.7):
         x = torch.cat((x, next_token), dim=1)
         token_int = next_token.item()
         
-        if token_int == tokenizer.eos_token_id: break 
+        if token_int == 0: break 
         
-        generated_ids.append(token_int)
+        generated_bytes.append(token_int)
         
-        # Stream the token
-        decoded_part = tokenizer.decode([token_int])
-        sys.stdout.write(decoded_part)
-        sys.stdout.flush()
+        # --- SMART DECODING LOGIC ---
+        
+        # 1. Handle Control Codes immediately
+        if token_int == 32: # Space
+            # If we had half a letter waiting, it's garbage now, so print valid space
+            byte_buffer.clear() 
+            sys.stdout.write(" ")
+            sys.stdout.flush()
+            continue
+        elif token_int == 10: # Newline
+            byte_buffer.clear()
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+            continue
+            
+        # 2. Add to buffer and try to decode
+        byte_buffer.append(int(token_int))  # Ensure it's an int, not a tensor
+        
+        try:
+            # Try to decode the WHOLE buffer
+            decoded_char = byte_buffer.decode('utf-8')
+            
+            # If we are here, it worked! Print it.
+            sys.stdout.write(decoded_char)
+            sys.stdout.flush()
+            
+            # Clear buffer for next letter
+            byte_buffer.clear()
+            
+        except UnicodeDecodeError:
+            # This means we only have HALF a letter (e.g. byte 208 of 'з').
+            # Do nothing. Loop again and wait for the second half.
+            pass
 
-    end_time = time.time()
-    duration = end_time - start_time
-    num_tokens = len(generated_ids)
-    tps = num_tokens / duration if duration > 0 else 0
-    
-    print(f"\n\n{Fore.YELLOW}[Stats: {num_tokens} tokens | {duration:.2f}s | {tps:.1f} tok/s]{Style.RESET_ALL}")
-    return tokenizer.decode(generated_ids)
+    print() # Final newline
+    return bytes(generated_bytes).decode('utf-8', errors='ignore')
 
 def main():
     # Use the English model path
