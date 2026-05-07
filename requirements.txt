@@ -1,0 +1,5 @@
+torch>=2.0.0
+datasets>=2.14.0
+colorama>=0.4.6
+psutil>=5.9.0
+gradio>=4.0.0
