@@ -6,7 +6,7 @@ Runs the model on a set of sample questions and prints outputs.
 import torch
 import os
 import sys
-from train_hope import HOPE, CONFIG, DEVICE
+from train_hope import HOPE, CONFIG, DEVICE, TOKENIZER, EOS_TOKEN_ID
 
 
 def load_model(path):
@@ -24,13 +24,12 @@ def load_model(path):
 
 def generate(model, prompt, max_new_tokens=200, temperature=0.7):
     full_prompt = f"Question: {prompt.strip()}\nAnswer: "
-    input_ids = list(full_prompt.encode('utf-8'))
-    x = torch.tensor([input_ids], dtype=torch.long).to(DEVICE)
+    input_ids = TOKENIZER.encode(full_prompt, return_tensors="pt").to(DEVICE)
 
     generated = []
 
     with torch.no_grad():
-        logits, state = model(x)
+        logits, state = model(input_ids)
 
     last_token_logits = logits[:, -1, :] / max(0.01, temperature)
     probs = torch.softmax(last_token_logits, dim=-1)
@@ -38,7 +37,7 @@ def generate(model, prompt, max_new_tokens=200, temperature=0.7):
 
     for _ in range(max_new_tokens):
         token_int = next_token.item()
-        if token_int == 0:
+        if token_int == EOS_TOKEN_ID:
             break
         generated.append(token_int)
 
@@ -50,7 +49,7 @@ def generate(model, prompt, max_new_tokens=200, temperature=0.7):
         probs = torch.softmax(last_token_logits, dim=-1)
         next_token = torch.multinomial(probs, num_samples=1)
 
-    return bytes(generated).decode('utf-8', errors='ignore')
+    return TOKENIZER.decode(generated, skip_special_tokens=True)
 
 
 TEST_QUESTIONS = [

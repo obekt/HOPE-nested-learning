@@ -7,20 +7,16 @@ import os
 import sys
 import time
 
-# ==========================================
-# PHASE 1: FOUNDATION TRAINING
-# ==========================================
 print("=" * 60)
 print("PHASE 1: FOUNDATION TRAINING (Wikipedia)")
 print("=" * 60)
 
-# Override train_hope CONFIG for Wikipedia
 import train_hope as th
 
 th.CONFIG.update({
     "d_model": 512,
     "n_layers": 16,
-    "vocab_size": 256,
+    "vocab_size": th.VOCAB_SIZE,
     "seq_len": 512,
     "batch_size": 4,
     "accumulate_grad": 8,
@@ -39,23 +35,18 @@ th.CONFIG.update({
     "log_file": "foundation.log",
 })
 
-# Run foundation training
 th.train()
 
 print("\n" + "=" * 60)
 print("PHASE 1 COMPLETE!")
 print("=" * 60)
 
-# ==========================================
-# PHASE 2: FINE-TUNING ON Q&A
-# ==========================================
 print("\n" + "=" * 60)
 print("PHASE 2: FINE-TUNING (Q&A Micro Dataset)")
 print("=" * 60)
 
-# Reset training state for fine-tuning
 th.CONFIG.update({
-    "learning_rate": 5e-5,  # Much lower for fine-tuning
+    "learning_rate": 5e-5,
     "max_steps": 3000,
     "warmup_steps": 300,
     "weight_decay": 0.01,
@@ -69,8 +60,6 @@ th.CONFIG.update({
     "log_file": "finetune.log",
 })
 
-# The train() function will auto-load hope_foundation.pth if it exists
-# and continue training on the new dataset
 th.train()
 
 print("\n" + "=" * 60)

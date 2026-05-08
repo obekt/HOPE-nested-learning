@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, IterableDataset
 from datasets import load_dataset
+from transformers import GPT2Tokenizer
 import time
 import sys
 import os
@@ -14,36 +15,43 @@ from colorama import Fore, Style, init
 init(autoreset=True)
 
 # ==========================================
+# 0. TOKENIZER
+# ==========================================
+print(f"{Fore.YELLOW}Loading GPT-2 tokenizer...{Style.RESET_ALL}")
+TOKENIZER = GPT2Tokenizer.from_pretrained("gpt2")
+TOKENIZER.pad_token = TOKENIZER.eos_token
+PAD_TOKEN_ID = TOKENIZER.pad_token_id
+EOS_TOKEN_ID = TOKENIZER.eos_token_id
+VOCAB_SIZE = TOKENIZER.vocab_size
+print(f"{Fore.GREEN}Tokenizer ready: vocab_size={VOCAB_SIZE}, pad_token_id={PAD_TOKEN_ID}{Style.RESET_ALL}")
+
+# ==========================================
 # 1. CONFIGURATION
 # ==========================================
 CONFIG = {
-    "d_model": 512,           # Width (Reasoning capability)
-    "n_layers": 16,           # Depth
-    "vocab_size": 256,        # Byte-Level
-    "seq_len": 512,           # Training window
+    "d_model": 512,
+    "n_layers": 16,
+    "vocab_size": VOCAB_SIZE,
+    "seq_len": 512,
 
-    # Training Scale
     "batch_size": 4,
-    "accumulate_grad": 8,     # Effective batch of 32
+    "accumulate_grad": 8,
 
-    # Learning
-    "learning_rate": 1e-3,    # Slightly higher for faster convergence on smaller data
-    "max_steps": 3000,        # ~1.2 epochs on 77k rows with effective batch 32
-    "warmup_steps": 500,
+    "learning_rate": 2e-4,
+    "max_steps": 12000,
+    "warmup_steps": 1500,
     "weight_decay": 0.05,
     "grad_clip": 1.0,
 
-    # --- DATASET SETTINGS ---
-    "dataset_name": "obekt/obekt-question-answer-reasoning-micro-v0.1",
-    "dataset_config": None,
-    "dataset_columns": "question, answer, reasoning",
-    "max_samples": 80000,
-    "isolate_samples": True,  # ISOLATED mode for Q&A data
+    "dataset_name": "wikimedia/wikipedia",
+    "dataset_config": "20231101.en",
+    "dataset_columns": "title, text",
+    "max_samples": 500000,
+    "isolate_samples": False,
 
-    # --- CHECKPOINTING ---
-    "save_path": "hope_final.pth",
-    "checkpoint_every": 500,  # Save every N steps
-    "log_file": "training.log",
+    "save_path": "hope_foundation.pth",
+    "checkpoint_every": 1000,
+    "log_file": "foundation.log",
 }
 
 DEVICE = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
@@ -60,14 +68,13 @@ class SelfModifyingLayer(nn.Module):
         self.proj_k = nn.Linear(dim, dim)
         self.proj_v = nn.Linear(dim, dim)
         self.proj_out = nn.Linear(dim, dim)
-        self.decay_param = nn.Parameter(torch.tensor(0.0))  # Logits for sigmoid
+        self.decay_param = nn.Parameter(torch.tensor(0.0))
 
     def forward(self, x, state=None, mask=None):
         q, k, v = self.proj_q(x), self.proj_k(x), self.proj_v(x)
         k = F.elu(k) + 1.0
         batch_size, seq_len, _ = x.shape
 
-        # Use provided state or initialize new memory
         memory = state if state is not None else torch.zeros(batch_size, self.dim, self.dim, device=x.device, dtype=x.dtype)
 
         if seq_len == 0:
@@ -82,7 +89,6 @@ class SelfModifyingLayer(nn.Module):
             update = torch.bmm(k_t.transpose(1, 2), v_t)
             decay_value = torch.sigmoid(self.decay_param)
 
-            # --- MASKED UPDATE FIX ---
             if mask is not None:
                 m_t = mask[:, t].view(batch_size, 1, 1)
                 memory = (1 - m_t) * memory + m_t * (decay_value * memory + update)
@@ -123,7 +129,6 @@ class HOPE(nn.Module):
         self._init_weights()
 
     def _init_weights(self):
-        # Better initialization for training stability
         for module in self.modules():
             if isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(module.weight)
@@ -133,11 +138,8 @@ class HOPE(nn.Module):
                 nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def forward(self, x, state=None):
-        # Create Padding Mask (1 for real tokens, 0 for padding 0)
-        mask = (x != 0).float()
-
+        mask = (x != PAD_TOKEN_ID).float()
         h = self.embedding(x)
-        # Pass mask to ensure memory doesn't leak during padding
         fast_out, new_state = self.fast_memory(h, state=state, mask=mask)
         h = self.norm_fast(h + fast_out)
         for layer in self.cms_layers:
@@ -150,11 +152,9 @@ class HOPE(nn.Module):
 # ==========================================
 
 def format_qa_item(item, columns):
-    """Format Q&A datasets with proper templates."""
     parts = []
     col_set = set(c.strip().lower() for c in columns)
 
-    # Specific formatting for question/answer/reasoning
     if "question" in col_set and "answer" in col_set:
         q = item.get("question", item.get("Question", ""))
         a = item.get("answer", item.get("Answer", ""))
@@ -167,7 +167,6 @@ def format_qa_item(item, columns):
                 parts.append(f"Reasoning: {r.strip()}")
             return "\n".join(parts) + "\n"
 
-    # Generic multi-column formatting
     for col in columns:
         col = col.strip()
         val = item.get(col)
@@ -187,7 +186,6 @@ class SmartTextDataset(IterableDataset):
         self.split = split
         self.samples_yielded = 0
 
-        # Parse the user's column preference
         self.target_columns = None
         if target_columns and isinstance(target_columns, str):
             self.target_columns = [c.strip() for c in target_columns.split(',') if c.strip()]
@@ -200,16 +198,13 @@ class SmartTextDataset(IterableDataset):
             self.hf_dataset = load_dataset(dataset_name, split=split, streaming=True)
 
     def _process_item(self, item):
-        # Update dashboard info
         if not self.detected_columns:
             self.detected_columns = list(item.keys())
 
-        # --- MODE 1: USER SPECIFIED COLUMNS ---
         if self.target_columns:
             text = format_qa_item(item, self.target_columns)
             if text:
                 return text
-            # Fallback to generic
             text_parts = []
             for col in self.target_columns:
                 val = item.get(col)
@@ -219,7 +214,6 @@ class SmartTextDataset(IterableDataset):
                 return "\n".join(text_parts) + "\n"
             return ""
 
-        # --- MODE 2: AUTO-DETECT (Universal) ---
         if 'text' in item and 'title' in item:
             return f"{item['title']}\n{item['text']}\n"
 
@@ -234,8 +228,6 @@ class SmartTextDataset(IterableDataset):
         iterator = iter(self.hf_dataset)
         count = 0
         buffer = []
-
-        # Check if we should isolate rows (Good for Q&A) or pack them (Good for Wikipedia)
         isolate = CONFIG.get('isolate_samples', False)
 
         while count < self.max_samples:
@@ -245,21 +237,18 @@ class SmartTextDataset(IterableDataset):
                 if not text:
                     continue
 
-                tokens = list(text.encode('utf-8'))
+                tokens = TOKENIZER.encode(text, add_special_tokens=False)
 
                 if isolate:
-                    # --- ISOLATED MODE: Each row is its own training example ---
-                    tokens = (tokens[:self.seq_len]) + [0]
+                    tokens = (tokens[:self.seq_len]) + [EOS_TOKEN_ID]
                     padding_needed = (self.seq_len + 1) - len(tokens)
                     if padding_needed > 0:
-                        tokens.extend([0] * padding_needed)
-
+                        tokens.extend([PAD_TOKEN_ID] * padding_needed)
                     yield torch.tensor(tokens, dtype=torch.long)
                     count += 1
                 else:
-                    # --- PACKED MODE: Stitch multiple rows together ---
-                    if buffer and buffer[-1] != 10:
-                        buffer.append(10)
+                    if buffer and buffer[-1] != EOS_TOKEN_ID:
+                        buffer.append(EOS_TOKEN_ID)
                     buffer.extend(tokens)
 
                     while len(buffer) >= self.seq_len + 1:
@@ -286,9 +275,9 @@ def format_time(seconds):
 
 def decode_preview(tensor):
     try:
-        tokens = tensor[0].tolist()[:120]
-        text = bytes(tokens).decode('utf-8', errors='ignore')
-        return text.replace('\n', ' ')
+        tokens = tensor[0].tolist()[:80]
+        text = TOKENIZER.decode(tokens, skip_special_tokens=True)
+        return text.replace('\n', ' ')[:120]
     except:
         return "..."
 
@@ -300,33 +289,23 @@ def clear_screen():
 
 def draw_dashboard(step, max_steps, loss, val_loss, speed, eta, columns, preview_text, lr):
     clear_screen()
-
-    # 1. Header
     print(f"{Fore.GREEN}=== HOPE NESTED LEARNING DASHBOARD ==={Style.RESET_ALL}")
-    print(f"Device: {Fore.CYAN}{DEVICE}{Style.RESET_ALL} | Model: {CONFIG['d_model']} dim / {CONFIG['n_layers']} layers")
+    print(f"Device: {Fore.CYAN}{DEVICE}{Style.RESET_ALL} | Model: {CONFIG['d_model']} dim / {CONFIG['n_layers']} layers | Vocab: {CONFIG['vocab_size']}")
     print(f"Dataset: {CONFIG['dataset_name']}")
-
-    # 2. Columns Found
     col_str = ", ".join(columns) if columns else "Scanning..."
     print(f"Columns Found: {Fore.YELLOW}[ {col_str} ]{Style.RESET_ALL}")
     print("-" * 60)
-
-    # 3. Live Data Preview
     print(f"{Fore.BLUE}Live Input Data:{Style.RESET_ALL}")
     print(f"\"{preview_text}...\"")
     print("-" * 60)
-
-    # 4. Progress Bar
     bar_len = 30
     filled_len = int(bar_len * step // max_steps)
     bar = '=' * filled_len + '-' * (bar_len - filled_len)
-
     val_str = f" | Val: {Fore.MAGENTA}{val_loss:.4f}{Style.RESET_ALL}" if val_loss is not None else ""
     print(f"Progress: [{Fore.GREEN}{bar}{Style.RESET_ALL}] {step}/{max_steps}")
     print(f"Stats:    Loss: {Fore.RED}{loss:.4f}{Style.RESET_ALL}{val_str} | Speed: {speed:.0f} tok/s | ETA: {eta}")
     print(f"LR:       {lr:.2e}")
     print("-" * 60)
-
     print(f"{Style.DIM}Press Ctrl+C to stop and save.{Style.RESET_ALL}")
 
 
@@ -347,17 +326,16 @@ def run_validation(model, val_loader, device):
             inputs = batch[:, :-1].to(device)
             targets = batch[:, 1:].to(device)
             logits, _ = model(inputs)
-            loss = F.cross_entropy(logits.reshape(-1, CONFIG['vocab_size']), targets.reshape(-1), ignore_index=0)
+            loss = F.cross_entropy(logits.reshape(-1, CONFIG['vocab_size']), targets.reshape(-1), ignore_index=PAD_TOKEN_ID)
             total_loss += loss.item()
             count += 1
-            if count >= 50:  # Limit validation to 50 batches for speed
+            if count >= 50:
                 break
     model.train()
     return total_loss / max(count, 1)
 
 
 def train():
-    # Setup
     model = HOPE(CONFIG['vocab_size'], CONFIG['d_model'], CONFIG['n_layers']).to(DEVICE)
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -366,7 +344,6 @@ def train():
         betas=(0.9, 0.95)
     )
 
-    # Learning rate scheduler with warmup
     def get_lr(step):
         warmup_steps = CONFIG.get('warmup_steps', 500)
         if step < warmup_steps:
@@ -375,7 +352,6 @@ def train():
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, get_lr)
 
-    # Resume Logic
     start_step = 0
     best_val_loss = float('inf')
     if os.path.exists(CONFIG['save_path']):
@@ -392,7 +368,6 @@ def train():
         else:
             model.load_state_dict(checkpoint)
 
-    # Data - Train
     train_dataset = SmartTextDataset(
         CONFIG['dataset_name'],
         CONFIG['dataset_config'],
@@ -403,7 +378,6 @@ def train():
     )
     train_loader = DataLoader(train_dataset, batch_size=CONFIG['batch_size'])
 
-    # Data - Validation (use a small subset of train for now if no val split)
     val_dataset = SmartTextDataset(
         CONFIG['dataset_name'],
         CONFIG['dataset_config'],
@@ -442,23 +416,20 @@ def train():
 
                 inputs = batch[:, :-1].to(DEVICE)
                 targets = batch[:, 1:].to(DEVICE)
-
-                # Capture text for dashboard
                 current_preview = decode_preview(inputs)
 
                 if scaler:
                     with torch.cuda.amp.autocast():
                         logits, _ = model(inputs)
-                        loss = F.cross_entropy(logits.reshape(-1, CONFIG['vocab_size']), targets.reshape(-1), ignore_index=0)
+                        loss = F.cross_entropy(logits.reshape(-1, CONFIG['vocab_size']), targets.reshape(-1), ignore_index=PAD_TOKEN_ID)
                     scaler.scale(loss).backward()
                 else:
                     logits, _ = model(inputs)
-                    loss = F.cross_entropy(logits.reshape(-1, CONFIG['vocab_size']), targets.reshape(-1), ignore_index=0)
+                    loss = F.cross_entropy(logits.reshape(-1, CONFIG['vocab_size']), targets.reshape(-1), ignore_index=PAD_TOKEN_ID)
                     loss.backward()
 
                 running_loss += loss.item()
 
-            # Gradient clipping
             if scaler:
                 scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), CONFIG.get('grad_clip', 1.0))
@@ -472,13 +443,11 @@ def train():
             scheduler.step()
             step += 1
 
-            # --- VALIDATION ---
-            if time.time() - last_val_time > 60:  # Every 60 seconds
+            if time.time() - last_val_time > 60:
                 val_loss = run_validation(model, val_loader, DEVICE)
                 last_val_time = time.time()
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
-                    # Save best model
                     best_path = CONFIG['save_path'].replace('.pth', '_best.pth')
                     torch.save({
                         'model_state': model.state_dict(),
@@ -489,7 +458,6 @@ def train():
                     }, best_path)
                     print(f"\n{Fore.GREEN}New best model saved! Val loss: {best_val_loss:.4f}{Style.RESET_ALL}")
 
-            # --- PERIODIC CHECKPOINT ---
             if step % CONFIG.get('checkpoint_every', 500) == 0:
                 checkpoint_data = {
                     'model_state': model.state_dict(),
@@ -501,11 +469,9 @@ def train():
                 torch.save(checkpoint_data, CONFIG['save_path'])
                 print(f"\n{Fore.CYAN}Checkpoint saved at step {step}{Style.RESET_ALL}")
 
-            # --- UPDATE DASHBOARD ---
             if time.time() - last_update_time > 0.2:
                 dt = time.time() - t0
                 dt = max(dt, 0.001)
-
                 tokens_per_sec = (CONFIG['batch_size'] * CONFIG['seq_len'] * CONFIG['accumulate_grad']) / dt
                 avg_loss = running_loss / CONFIG['accumulate_grad']
                 running_loss = 0
@@ -513,15 +479,9 @@ def train():
                 current_lr = scheduler.get_last_lr()[0]
 
                 draw_dashboard(
-                    step,
-                    CONFIG['max_steps'],
-                    avg_loss,
-                    val_loss,
-                    tokens_per_sec,
-                    format_time(eta_seconds),
-                    train_dataset.detected_columns,
-                    current_preview,
-                    current_lr
+                    step, CONFIG['max_steps'], avg_loss, val_loss,
+                    tokens_per_sec, format_time(eta_seconds),
+                    train_dataset.detected_columns, current_preview, current_lr
                 )
                 val_str = f"{val_loss:.4f}" if val_loss is not None else "N/A"
                 log_msg = f"Step {step}/{CONFIG['max_steps']} | Loss: {avg_loss:.4f} | Val: {val_str} | LR: {current_lr:.2e} | Speed: {tokens_per_sec:.0f} tok/s"
@@ -529,7 +489,7 @@ def train():
                 last_update_time = time.time()
 
     except KeyboardInterrupt:
-        pass  # Handle save below
+        pass
 
     print(f"\n{Fore.GREEN}Saving to {CONFIG['save_path']}...{Style.RESET_ALL}")
     checkpoint_data = {
