@@ -20,6 +20,7 @@ init(autoreset=True)
 print(f"{Fore.YELLOW}Loading GPT-2 tokenizer...{Style.RESET_ALL}")
 TOKENIZER = GPT2Tokenizer.from_pretrained("gpt2")
 TOKENIZER.pad_token = TOKENIZER.eos_token
+TOKENIZER.model_max_length = 1_000_000_000  # Suppress max_length warnings on long articles
 PAD_TOKEN_ID = TOKENIZER.pad_token_id
 EOS_TOKEN_ID = TOKENIZER.eos_token_id
 VOCAB_SIZE = TOKENIZER.vocab_size
