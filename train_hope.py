@@ -41,7 +41,7 @@ CONFIG = {
     "isolate_samples": True,  # ISOLATED mode for Q&A data
 
     # --- CHECKPOINTING ---
-    "save_path": "hope_qa_micro.pth",
+    "save_path": "hope_final.pth",
     "checkpoint_every": 500,  # Save every N steps
     "log_file": "training.log",
 }
