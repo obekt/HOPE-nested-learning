@@ -6,6 +6,7 @@ Runs both phases automatically.
 import os
 import sys
 import time
+import shutil
 
 print("=" * 60)
 print("PHASE 1: FOUNDATION TRAINING (Wikipedia)")
@@ -59,6 +60,32 @@ th.CONFIG.update({
     "checkpoint_every": 500,
     "log_file": "finetune.log",
 })
+
+# Seed Phase 2 with foundation weights (reset step + optimizer so fine-tuning starts fresh)
+import torch as _torch
+foundation_best = "hope_foundation_best.pth"
+foundation_main = "hope_foundation.pth"
+source = foundation_best if os.path.exists(foundation_best) else foundation_main
+
+if os.path.exists(source):
+    print(f"Loading {source} and resetting training state for Phase 2...")
+    ckpt = _torch.load(source, map_location="cpu")
+    if isinstance(ckpt, dict) and 'model_state' in ckpt:
+        phase2_ckpt = {
+            'model_state': ckpt['model_state'],
+            'step': 0,
+            'best_val_loss': float('inf'),
+            # Intentionally omit optimizer_state and scheduler_state
+            # so Phase 2 gets a fresh optimizer with its own LR schedule
+        }
+    else:
+        # Legacy checkpoint (raw state_dict)
+        phase2_ckpt = ckpt
+    _torch.save(phase2_ckpt, "hope_final.pth")
+    print("Phase 2 checkpoint ready: hope_final.pth (step=0, fresh optimizer)")
+else:
+    print("WARNING: No foundation checkpoint found! Phase 2 will train from scratch.")
+
 
 th.train()
 

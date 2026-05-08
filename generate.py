@@ -21,7 +21,7 @@ def load_model(path):
     else:
         state_dict = checkpoint
 
-    model.load_state_dict(state_dict, strict=False)
+    model.load_state_dict(state_dict, strict=True)
     model.to(DEVICE)
     model.eval()
     return model

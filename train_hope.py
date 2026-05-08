@@ -180,11 +180,12 @@ def format_qa_item(item, columns):
 
 
 class SmartTextDataset(IterableDataset):
-    def __init__(self, dataset_name, dataset_config, seq_len, target_columns=None, max_samples=50000, split="train"):
+    def __init__(self, dataset_name, dataset_config, seq_len, target_columns=None, max_samples=50000, split="train", skip_samples=0):
         self.seq_len = seq_len
         self.max_samples = max_samples
         self.detected_columns = []
         self.split = split
+        self.skip_samples = skip_samples
         self.samples_yielded = 0
 
         self.target_columns = None
@@ -227,6 +228,12 @@ class SmartTextDataset(IterableDataset):
 
     def __iter__(self):
         iterator = iter(self.hf_dataset)
+        # Skip ahead in the stream to avoid overlap with training data
+        for _ in range(self.skip_samples):
+            try:
+                next(iterator)
+            except StopIteration:
+                return
         count = 0
         buffer = []
         isolate = CONFIG.get('isolate_samples', False)
@@ -385,7 +392,8 @@ def train():
         CONFIG['seq_len'],
         target_columns=CONFIG.get('dataset_columns'),
         max_samples=1000,
-        split="train"
+        split="train",
+        skip_samples=100000,  # Skip ahead to avoid overlap with training data
     )
     val_loader = DataLoader(val_dataset, batch_size=CONFIG['batch_size'])
 
@@ -395,6 +403,7 @@ def train():
     iter_loader = iter(train_loader)
     step = start_step
     running_loss = 0
+    steps_since_display = 0
     val_loss = None
 
     start_time = time.time()
@@ -429,7 +438,7 @@ def train():
                     loss = F.cross_entropy(logits.reshape(-1, CONFIG['vocab_size']), targets.reshape(-1), ignore_index=PAD_TOKEN_ID)
                     loss.backward()
 
-                running_loss += loss.item()
+                running_loss += loss.item() / CONFIG['accumulate_grad']
 
             if scaler:
                 scaler.unscale_(optimizer)
@@ -443,6 +452,7 @@ def train():
 
             scheduler.step()
             step += 1
+            steps_since_display += 1
 
             if time.time() - last_val_time > 60:
                 val_loss = run_validation(model, val_loader, DEVICE)
@@ -474,8 +484,9 @@ def train():
                 dt = time.time() - t0
                 dt = max(dt, 0.001)
                 tokens_per_sec = (CONFIG['batch_size'] * CONFIG['seq_len'] * CONFIG['accumulate_grad']) / dt
-                avg_loss = running_loss / CONFIG['accumulate_grad']
+                avg_loss = running_loss / max(steps_since_display, 1)
                 running_loss = 0
+                steps_since_display = 0
                 eta_seconds = (CONFIG['max_steps'] - step) * dt
                 current_lr = scheduler.get_last_lr()[0]
 

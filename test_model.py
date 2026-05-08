@@ -16,7 +16,7 @@ def load_model(path):
         state_dict = checkpoint['model_state']
     else:
         state_dict = checkpoint
-    model.load_state_dict(state_dict, strict=False)
+    model.load_state_dict(state_dict, strict=True)
     model.to(DEVICE)
     model.eval()
     return model
@@ -53,7 +53,7 @@ def generate(model, prompt, max_new_tokens=200, temperature=0.7):
 
 
 TEST_QUESTIONS = [
-    "What is the sky blue?",
+    "Why is the sky blue?",
     "Can animals talk?",
     "What is artificial intelligence?",
     "Why do we sleep?",

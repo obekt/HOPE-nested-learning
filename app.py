@@ -38,7 +38,7 @@ else:
     print("Detected Legacy Checkpoint.")
     state_dict = checkpoint
 
-model.load_state_dict(state_dict, strict=False)
+model.load_state_dict(state_dict, strict=True)
 model.to(DEVICE)
 model.eval()
 print("Model loaded successfully!")
