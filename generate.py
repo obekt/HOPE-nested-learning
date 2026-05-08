@@ -27,7 +27,7 @@ def load_model(path):
     return model
 
 
-def generate(model, prompt, max_new_tokens=200, temperature=0.7, top_p=0.9):
+def generate(model, prompt, max_new_tokens=200, temperature=0.7):
     full_prompt = f"Question: {prompt.strip()}\nAnswer: "
     input_ids = list(full_prompt.encode('utf-8'))
     x = torch.tensor([input_ids], dtype=torch.long).to(DEVICE)
@@ -37,7 +37,9 @@ def generate(model, prompt, max_new_tokens=200, temperature=0.7, top_p=0.9):
     with torch.no_grad():
         logits, state = model(x)
 
-    next_token = sample_token(logits[:, -1, :], temperature, top_p)
+    last_token_logits = logits[:, -1, :] / max(0.01, temperature)
+    probs = F.softmax(last_token_logits, dim=-1)
+    next_token = torch.multinomial(probs, num_samples=1)
 
     for _ in range(max_new_tokens):
         token_int = next_token.item()
@@ -49,25 +51,11 @@ def generate(model, prompt, max_new_tokens=200, temperature=0.7, top_p=0.9):
             x = next_token
             logits, state = model(x, state=state)
 
-        next_token = sample_token(logits[:, -1, :], temperature, top_p)
+        last_token_logits = logits[:, -1, :] / max(0.01, temperature)
+        probs = F.softmax(last_token_logits, dim=-1)
+        next_token = torch.multinomial(probs, num_samples=1)
 
     return bytes(generated).decode('utf-8', errors='ignore')
-
-
-def sample_token(logits, temperature, top_p):
-    logits = logits / max(0.01, temperature)
-
-    if top_p < 1.0:
-        sorted_logits, sorted_indices = torch.sort(logits, descending=True)
-        cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
-        sorted_indices_to_remove = cumulative_probs > top_p
-        sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
-        sorted_indices_to_remove[..., 0] = 0
-        indices_to_remove = sorted_indices[sorted_indices_to_remove]
-        logits[indices_to_remove] = -float('Inf')
-
-    probs = F.softmax(logits, dim=-1)
-    return torch.multinomial(probs, num_samples=1)
 
 
 def main():
@@ -75,7 +63,6 @@ def main():
     parser.add_argument("--prompt", type=str, required=True, help="Input prompt/question")
     parser.add_argument("--max-tokens", type=int, default=200, help="Maximum tokens to generate")
     parser.add_argument("--temperature", type=float, default=0.7, help="Sampling temperature")
-    parser.add_argument("--top-p", type=float, default=0.9, help="Nucleus sampling top-p")
     parser.add_argument("--model", type=str, default=None, help="Path to model checkpoint")
     args = parser.parse_args()
 
@@ -86,7 +73,7 @@ def main():
 
     if not os.path.exists(model_path):
         print(f"Error: Model not found at {model_path}")
-        print("Train a model first with: python train_hope.py")
+        print("Train first with: python train_hope.py")
         sys.exit(1)
 
     model = load_model(model_path)
@@ -94,7 +81,7 @@ def main():
     print(f"Prompt: {args.prompt}\n")
     print("-" * 40)
 
-    result = generate(model, args.prompt, args.max_tokens, args.temperature, args.top_p)
+    result = generate(model, args.prompt, args.max_tokens, args.temperature)
     print(result)
 
 
