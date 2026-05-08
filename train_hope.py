@@ -353,10 +353,13 @@ def train():
     )
 
     def get_lr(step):
+        import math
         warmup_steps = CONFIG.get('warmup_steps', 500)
         if step < warmup_steps:
             return step / warmup_steps
-        return max(0.1, 1.0 - (step - warmup_steps) / (CONFIG['max_steps'] - warmup_steps))
+        # Cosine decay to 1% of peak LR
+        progress = (step - warmup_steps) / max(1, CONFIG['max_steps'] - warmup_steps)
+        return 0.01 + 0.5 * (1.0 - 0.01) * (1.0 + math.cos(math.pi * progress))
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, get_lr)
 

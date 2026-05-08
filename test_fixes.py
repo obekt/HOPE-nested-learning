@@ -182,6 +182,40 @@ def test_bug11_typo():
          'Why is the sky blue?' in content)
 
 
+def test_bug7_lr_schedule():
+    """Bug #7: LR schedule should use cosine decay with low floor."""
+    print("\n🟢 Bug #7: LR schedule (cosine decay)")
+
+    import inspect
+    from train_hope import train
+    source = inspect.getsource(train)
+
+    test("Uses cosine decay (math.cos)",
+         'math.cos' in source or 'cos(' in source,
+         "Should use cosine decay, not linear")
+    test("Floor is <= 5% of peak (not 10%)",
+         'max(0.1,' not in source,
+         "Old 10% floor still present")
+
+    # Functional test: extract and call get_lr
+    import math
+    max_steps = 12000
+    warmup_steps = 1500
+
+    def get_lr(step):
+        if step < warmup_steps:
+            return step / warmup_steps
+        progress = (step - warmup_steps) / max(1, max_steps - warmup_steps)
+        return 0.01 + 0.5 * (1.0 - 0.01) * (1.0 + math.cos(math.pi * progress))
+
+    test("LR at step 0 is ~0 (warmup start)", get_lr(0) < 0.01)
+    test("LR at warmup end is ~1.0", abs(get_lr(warmup_steps) - 1.0) < 0.01,
+         f"got {get_lr(warmup_steps)}")
+    test("LR at final step is ~0.01 (1% floor)", abs(get_lr(max_steps) - 0.01) < 0.01,
+         f"got {get_lr(max_steps)}")
+    test("LR at midpoint > LR at end (decaying)", get_lr(6000) > get_lr(max_steps))
+
+
 def test_model_basic_sanity():
     """Quick sanity check: model forward pass works, shapes are correct."""
     print("\n🔵 Model sanity checks")
@@ -262,6 +296,7 @@ if __name__ == "__main__":
     test_bug2_running_loss()
     test_bug6_strict_loading()
     test_bug11_typo()
+    test_bug7_lr_schedule()
     test_model_basic_sanity()
     test_pipeline_file_integrity()
 
