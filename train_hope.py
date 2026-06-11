@@ -35,6 +35,12 @@ CONFIG = {
     "vocab_size": VOCAB_SIZE,
     "seq_len": 512,
 
+    # Nested learning: CMS tiers as [n_layers, update_period] pairs.
+    # Layer counts must sum to n_layers. Period = optimizer steps between
+    # updates for that tier (gradients are averaged in between).
+    # Fast tier also owns embedding, fast_memory, norms and head.
+    "cms_tiers": [[8, 1], [5, 4], [3, 16]],
+
     "batch_size": 4,
     "accumulate_grad": 8,
 
@@ -62,6 +68,18 @@ DEVICE = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is
 # ==========================================
 
 class SelfModifyingLayer(nn.Module):
+    """Fast-weight memory trained by an inner-loop delta rule.
+
+    The memory matrix M performs one step of online gradient descent per token
+    on the reconstruction loss ||k M - v||^2:
+
+        M_t = alpha_t * M_{t-1} + beta_t * k_t^T (v_t - k_t M_{t-1})
+
+    where alpha_t (forget gate) and beta_t (inner learning rate) are
+    input-dependent, learned per token. This is genuine inner-loop learning:
+    the write is proportional to the memory's prediction *error*, so content
+    the memory already knows is not re-written.
+    """
     def __init__(self, dim):
         super().__init__()
         self.dim = dim
@@ -69,12 +87,20 @@ class SelfModifyingLayer(nn.Module):
         self.proj_k = nn.Linear(dim, dim)
         self.proj_v = nn.Linear(dim, dim)
         self.proj_out = nn.Linear(dim, dim)
-        self.decay_param = nn.Parameter(torch.tensor(0.0))
+        # Per-token gates: alpha (forget/retain) and beta (inner LR)
+        self.gate_alpha = nn.Linear(dim, 1)
+        self.gate_beta = nn.Linear(dim, 1)
 
     def forward(self, x, state=None, mask=None):
         q, k, v = self.proj_q(x), self.proj_k(x), self.proj_v(x)
-        k = F.elu(k) + 1.0
+        # Normalize keys so the delta-rule inner step is well-conditioned
+        # (||k||=1 makes beta a true step size and bounds the update).
+        k = F.normalize(k, dim=-1)
         batch_size, seq_len, _ = x.shape
+
+        # alpha near 1.0 at init (retain), beta small at init (gentle writes)
+        alpha = torch.sigmoid(self.gate_alpha(x) + 4.0)   # [B, T, 1]
+        beta = torch.sigmoid(self.gate_beta(x) - 2.0)     # [B, T, 1]
 
         memory = state if state is not None else torch.zeros(batch_size, self.dim, self.dim, device=x.device, dtype=x.dtype)
 
@@ -83,18 +109,25 @@ class SelfModifyingLayer(nn.Module):
 
         outputs = []
         for t in range(seq_len):
-            q_t = q[:, t, :].unsqueeze(1)
-            k_t = k[:, t, :].unsqueeze(1)
-            v_t = v[:, t, :].unsqueeze(1)
+            q_t = q[:, t, :].unsqueeze(1)   # [B, 1, D]
+            k_t = k[:, t, :].unsqueeze(1)   # [B, 1, D]
+            v_t = v[:, t, :].unsqueeze(1)   # [B, 1, D]
+            a_t = alpha[:, t, :].unsqueeze(1)  # [B, 1, 1]
+            b_t = beta[:, t, :].unsqueeze(1)   # [B, 1, 1]
+
             read_out = torch.bmm(q_t, memory)
-            update = torch.bmm(k_t.transpose(1, 2), v_t)
-            decay_value = torch.sigmoid(self.decay_param)
+
+            # Inner-loop SGD step: write only the prediction error
+            pred = torch.bmm(k_t, memory)              # [B, 1, D] what M recalls for k
+            error = v_t - pred                          # [B, 1, D]
+            update = b_t * torch.bmm(k_t.transpose(1, 2), error)
+            new_memory = a_t * memory + update
 
             if mask is not None:
                 m_t = mask[:, t].view(batch_size, 1, 1)
-                memory = (1 - m_t) * memory + m_t * (decay_value * memory + update)
+                memory = (1 - m_t) * memory + m_t * new_memory
             else:
-                memory = decay_value * memory + update
+                memory = new_memory
 
             outputs.append(read_out)
 
@@ -118,7 +151,7 @@ class ContinuumMemoryBlock(nn.Module):
 
 
 class HOPE(nn.Module):
-    def __init__(self, vocab_size, d_model, n_layers):
+    def __init__(self, vocab_size, d_model, n_layers, cms_tiers=None):
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, d_model)
         self.fast_memory = SelfModifyingLayer(d_model)
@@ -127,7 +160,37 @@ class HOPE(nn.Module):
             ContinuumMemoryBlock(d_model) for _ in range(n_layers)
         ])
         self.head = nn.Linear(d_model, vocab_size)
+
+        # Nested learning tiers: [[n_layers, update_period], ...]
+        # Earlier CMS layers -> faster tiers, later layers -> slower tiers.
+        if cms_tiers is None:
+            cms_tiers = [[n_layers, 1]]
+        assert sum(n for n, _ in cms_tiers) == n_layers, \
+            f"cms_tiers layer counts {[n for n, _ in cms_tiers]} must sum to n_layers={n_layers}"
+        self.cms_tiers = [list(t) for t in cms_tiers]
+
         self._init_weights()
+
+    def tier_param_groups(self):
+        """Partition parameters into (period, params) groups for nested updates.
+
+        Tier 0 (fastest) also owns the embedding, fast memory, norm and head,
+        since those must track data at the highest frequency.
+        """
+        groups = []
+        layer_idx = 0
+        for i, (n, period) in enumerate(self.cms_tiers):
+            params = []
+            if i == 0:
+                params += list(self.embedding.parameters())
+                params += list(self.fast_memory.parameters())
+                params += list(self.norm_fast.parameters())
+                params += list(self.head.parameters())
+            for layer in self.cms_layers[layer_idx:layer_idx + n]:
+                params += list(layer.parameters())
+            layer_idx += n
+            groups.append((period, params))
+        return groups
 
     def _init_weights(self):
         for module in self.modules():
@@ -138,8 +201,9 @@ class HOPE(nn.Module):
             elif isinstance(module, nn.Embedding):
                 nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, x, state=None):
-        mask = (x != PAD_TOKEN_ID).float()
+    def forward(self, x, state=None, mask=None):
+        if mask is None:
+            mask = (x != PAD_TOKEN_ID).float()
         h = self.embedding(x)
         fast_out, new_state = self.fast_memory(h, state=state, mask=mask)
         h = self.norm_fast(h + fast_out)
@@ -343,17 +407,25 @@ def run_validation(model, val_loader, device):
     return total_loss / max(count, 1)
 
 
-def train():
-    model = HOPE(CONFIG['vocab_size'], CONFIG['d_model'], CONFIG['n_layers']).to(DEVICE)
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=CONFIG['learning_rate'],
-        weight_decay=CONFIG.get('weight_decay', 0.01),
-        betas=(0.9, 0.95)
-    )
+def make_checkpoint(model, optimizers, schedulers, tier_counters, step, best_val_loss):
+    return {
+        'model_state': model.state_dict(),
+        'step': step,
+        'best_val_loss': best_val_loss,
+        'optimizer_states': [opt.state_dict() for opt in optimizers],
+        'scheduler_states': [sch.state_dict() for sch in schedulers],
+        'tier_counters': list(tier_counters),
+        'cms_tiers': CONFIG.get('cms_tiers'),
+    }
+
+
+def build_nested_optimizers(model):
+    """One AdamW + scheduler per tier. Slow tiers step every `period` steps
+    on gradients averaged over the interval — this is the nested-frequency
+    update schedule that consolidates slow weights."""
+    import math
 
     def get_lr(step):
-        import math
         warmup_steps = CONFIG.get('warmup_steps', 500)
         if step < warmup_steps:
             return step / warmup_steps
@@ -361,20 +433,40 @@ def train():
         progress = (step - warmup_steps) / max(1, CONFIG['max_steps'] - warmup_steps)
         return 0.01 + 0.5 * (1.0 - 0.01) * (1.0 + math.cos(math.pi * progress))
 
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, get_lr)
+    optimizers, schedulers, periods = [], [], []
+    for period, params in model.tier_param_groups():
+        opt = torch.optim.AdamW(
+            params,
+            lr=CONFIG['learning_rate'],
+            weight_decay=CONFIG.get('weight_decay', 0.01),
+            betas=(0.9, 0.95)
+        )
+        optimizers.append(opt)
+        schedulers.append(torch.optim.lr_scheduler.LambdaLR(opt, get_lr))
+        periods.append(period)
+    return optimizers, schedulers, periods
+
+
+def train():
+    model = HOPE(CONFIG['vocab_size'], CONFIG['d_model'], CONFIG['n_layers'],
+                 cms_tiers=CONFIG.get('cms_tiers')).to(DEVICE)
+    optimizers, schedulers, tier_periods = build_nested_optimizers(model)
 
     start_step = 0
     best_val_loss = float('inf')
+    checkpoint = None
     if os.path.exists(CONFIG['save_path']):
         checkpoint = torch.load(CONFIG['save_path'], map_location=DEVICE)
         if isinstance(checkpoint, dict) and 'model_state' in checkpoint:
             model.load_state_dict(checkpoint['model_state'])
             start_step = checkpoint.get('step', 0)
             best_val_loss = checkpoint.get('best_val_loss', float('inf'))
-            if 'optimizer_state' in checkpoint:
-                optimizer.load_state_dict(checkpoint['optimizer_state'])
-            if 'scheduler_state' in checkpoint:
-                scheduler.load_state_dict(checkpoint['scheduler_state'])
+            if 'optimizer_states' in checkpoint and len(checkpoint['optimizer_states']) == len(optimizers):
+                for opt, s in zip(optimizers, checkpoint['optimizer_states']):
+                    opt.load_state_dict(s)
+            if 'scheduler_states' in checkpoint and len(checkpoint['scheduler_states']) == len(schedulers):
+                for sch, s in zip(schedulers, checkpoint['scheduler_states']):
+                    sch.load_state_dict(s)
             print(f"{Fore.GREEN}Resumed from step {start_step}, best val loss: {best_val_loss:.4f}{Style.RESET_ALL}")
         else:
             model.load_state_dict(checkpoint)
@@ -402,6 +494,17 @@ def train():
 
     scaler = torch.cuda.amp.GradScaler() if DEVICE == "cuda" else None
 
+    # Nested update machinery: per-tier gradient buffers and step counters.
+    # Slow tiers harvest (unscaled) gradients every step and apply the
+    # averaged gradient once every `period` steps.
+    tier_param_lists = [params for _, params in model.tier_param_groups()]
+    grad_buffers = [[torch.zeros_like(p) for p in params] for params in tier_param_lists]
+    tier_counters = [0] * len(tier_periods)
+    if isinstance(checkpoint, dict) and 'tier_counters' in checkpoint:
+        saved = checkpoint['tier_counters']
+        if len(saved) == len(tier_counters):
+            tier_counters = list(saved)
+
     model.train()
     iter_loader = iter(train_loader)
     step = start_step
@@ -418,7 +521,7 @@ def train():
     try:
         while step < CONFIG['max_steps']:
             t0 = time.time()
-            optimizer.zero_grad()
+            model.zero_grad(set_to_none=True)
 
             for _ in range(CONFIG['accumulate_grad']):
                 try:
@@ -443,17 +546,37 @@ def train():
 
                 running_loss += loss.item() / CONFIG['accumulate_grad']
 
+            # Unscale once so buffered gradients are in true scale
             if scaler:
-                scaler.unscale_(optimizer)
+                for opt in optimizers:
+                    scaler.unscale_(opt)
             torch.nn.utils.clip_grad_norm_(model.parameters(), CONFIG.get('grad_clip', 1.0))
 
-            if scaler:
-                scaler.step(optimizer)
-                scaler.update()
-            else:
-                optimizer.step()
+            # === NESTED UPDATE: each tier steps at its own frequency ===
+            # Every step: harvest this step's gradients into the tier buffer.
+            # When a tier's period elapses: load the averaged gradient and step.
+            for i, (opt, sch, period, params) in enumerate(
+                    zip(optimizers, schedulers, tier_periods, tier_param_lists)):
+                for buf, p in zip(grad_buffers[i], params):
+                    if p.grad is not None:
+                        buf.add_(p.grad)
+                tier_counters[i] += 1
 
-            scheduler.step()
+                if tier_counters[i] >= period:
+                    for buf, p in zip(grad_buffers[i], params):
+                        p.grad = buf.div_(period)
+                    if scaler:
+                        scaler.step(opt)  # grads already unscaled; keeps inf-skip safety
+                    else:
+                        opt.step()
+                    for j in range(len(grad_buffers[i])):
+                        grad_buffers[i][j] = torch.zeros_like(params[j])
+                    tier_counters[i] = 0
+                # Scheduler ticks every step for all tiers so LR stays in sync
+                sch.step()
+
+            if scaler:
+                scaler.update()
             step += 1
             steps_since_display += 1
 
@@ -463,23 +586,11 @@ def train():
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
                     best_path = CONFIG['save_path'].replace('.pth', '_best.pth')
-                    torch.save({
-                        'model_state': model.state_dict(),
-                        'step': step,
-                        'best_val_loss': best_val_loss,
-                        'optimizer_state': optimizer.state_dict(),
-                        'scheduler_state': scheduler.state_dict()
-                    }, best_path)
+                    torch.save(make_checkpoint(model, optimizers, schedulers, tier_counters, step, best_val_loss), best_path)
                     print(f"\n{Fore.GREEN}New best model saved! Val loss: {best_val_loss:.4f}{Style.RESET_ALL}")
 
             if step % CONFIG.get('checkpoint_every', 500) == 0:
-                checkpoint_data = {
-                    'model_state': model.state_dict(),
-                    'step': step,
-                    'best_val_loss': best_val_loss,
-                    'optimizer_state': optimizer.state_dict(),
-                    'scheduler_state': scheduler.state_dict()
-                }
+                checkpoint_data = make_checkpoint(model, optimizers, schedulers, tier_counters, step, best_val_loss)
                 torch.save(checkpoint_data, CONFIG['save_path'])
                 print(f"\n{Fore.CYAN}Checkpoint saved at step {step}{Style.RESET_ALL}")
 
@@ -491,7 +602,7 @@ def train():
                 running_loss = 0
                 steps_since_display = 0
                 eta_seconds = (CONFIG['max_steps'] - step) * dt
-                current_lr = scheduler.get_last_lr()[0]
+                current_lr = schedulers[0].get_last_lr()[0]
 
                 draw_dashboard(
                     step, CONFIG['max_steps'], avg_loss, val_loss,
@@ -507,14 +618,7 @@ def train():
         pass
 
     print(f"\n{Fore.GREEN}Saving to {CONFIG['save_path']}...{Style.RESET_ALL}")
-    checkpoint_data = {
-        'model_state': model.state_dict(),
-        'step': step,
-        'best_val_loss': best_val_loss,
-        'optimizer_state': optimizer.state_dict(),
-        'scheduler_state': scheduler.state_dict()
-    }
-    torch.save(checkpoint_data, CONFIG['save_path'])
+    torch.save(make_checkpoint(model, optimizers, schedulers, tier_counters, step, best_val_loss), CONFIG['save_path'])
     print("Done.")
 
 

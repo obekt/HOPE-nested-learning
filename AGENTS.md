@@ -24,6 +24,8 @@ Core idea: Intelligence is a nested optimization problem, not just deep layers. 
 | `app.py` | Gradio web UI for chatting with the model. |
 | `generate.py` | CLI one-shot text generation. |
 | `test_model.py` | Quick evaluation on 5 hardcoded test questions. |
+| `test_nested.py` | **Behavioral tests** for the nested-learning core: state-passing equivalence, delta-rule convergence, tier update schedule, checkpoint roundtrip. Run after any change to the model or training loop. |
+| `test_fixes.py` | Regression tests from earlier code reviews. |
 | `requirements.txt` | Python dependencies. |
 
 ---
@@ -37,17 +39,22 @@ Input Tokens
     ↓
 Embedding (vocab_size × d_model)
     ↓
-SelfModifyingLayer (Fast Weights)
-    - proj_q, proj_k, proj_v, proj_out (Linear layers)
-    - decay_param (learnable sigmoid gate)
+SelfModifyingLayer (Fast Weights — inner-loop delta rule)
+    - proj_q, proj_k, proj_v, proj_out (Linear layers); keys L2-normalized
+    - gate_alpha (per-token forget gate), gate_beta (per-token inner LR)
+    - Memory update: M_t = α_t·M_{t-1} + β_t·k_tᵀ(v_t − k_t·M_{t-1})
+      → one SGD step per token on ||kM − v||²; writes only prediction error
     - Maintains memory matrix: [batch, d_model, d_model]
-    - Updates memory per token with optional padding mask
+    - Optional padding mask: masked tokens leave M untouched
     ↓
 LayerNorm + Residual
     ↓
-CMS Layers × n_layers (Slow Weights)
-    - Each: Linear → GELU → Linear → Dropout
-    - LayerNorm + Residual
+CMS Layers × n_layers (Slow Weights, tiered update frequencies)
+    - Each: Linear → GELU → Linear → Dropout, LayerNorm + Residual
+    - Partitioned by CONFIG["cms_tiers"] = [[8,1],[5,4],[3,16]]:
+      tier 0 (8 layers + embedding/fast_memory/head) steps every opt step,
+      tier 1 (5 layers) every 4 steps, tier 2 (3 layers) every 16 steps.
+    - Slow tiers apply the AVERAGE of buffered gradients when they step.
     ↓
 Head (d_model × vocab_size)
     ↓
@@ -58,7 +65,9 @@ Logits
 
 1. **Byte-level → GPT-2 Tokenizer**: We switched from 256-byte vocab to GPT-2's 50K BPE tokenizer. This made training 10-50x more efficient. The architecture itself is unchanged.
 2. **Padding Mask**: `SelfModifyingLayer` takes a `mask` parameter. When `isolate_samples=True`, real tokens are 1 and padding is 0. Memory only updates on real tokens.
-3. **State Passing**: During inference, the memory matrix from the SelfModifyingLayer is carried forward token-by-token. This gives O(N) inference instead of O(N²).
+3. **State Passing**: During inference, the memory matrix from the SelfModifyingLayer is carried forward token-by-token. This gives O(N) inference instead of O(N²). Verified by an equivalence test in `test_nested.py`.
+4. **Nested optimizers**: `build_nested_optimizers()` creates one AdamW + LR scheduler per tier. The training loop buffers gradients per tier and steps each tier at its period (`train_hope.py`, "NESTED UPDATE" block). Checkpoints store `optimizer_states` (list), `scheduler_states` (list), and `tier_counters`. Old single-optimizer checkpoints still load (model weights only, fresh optimizers).
+5. **Delta-rule memory**: error-driven writes mean repeated content converges instead of accumulating; memory stays bounded without a normalizer.
 
 ---
 
@@ -84,6 +93,7 @@ CONFIG = {
     "isolate_samples": False, # True = each row is separate (Q&A). False = packed (Wikipedia)
     "save_path": "hope_foundation.pth",
     "checkpoint_every": 1000,
+    "cms_tiers": [[8, 1], [5, 4], [3, 16]],  # Nested tiers: [n_layers, update_period]. Counts must sum to n_layers.
 }
 ```
 
@@ -184,7 +194,10 @@ python generate.py --prompt "Why is the sky blue?" --temperature 0.7
 
 7. **Weight transfer from GPT-2** — Not directly possible due to architecture mismatch. But could initialize embeddings from GPT-2's embedding layer (same vocab, same size if d_model=768).
 8. **Knowledge Distillation** — Use GPT-2 or GPT-4o-mini to generate "teacher" answers for the Q&A dataset. Train HOPE to match teacher logits.
-9. **Multi-scale CMS** — Implement the paper's full hierarchy: Fast, Medium, Slow memory with different update frequencies.
+9. ~~**Multi-scale CMS**~~ — **DONE.** Fast/Medium/Slow tiers with per-tier optimizers and update periods (`cms_tiers` in CONFIG, `build_nested_optimizers()`, the NESTED UPDATE block in `train()`). Behavioral tests in `test_nested.py`.
+10. **Benchmark forgetting** — Measure Phase 1 val loss before/after Phase 2 to quantify how much the tiered schedule actually mitigates catastrophic forgetting (claim is currently structural, not measured).
+11. **Parallelize the fast-memory scan** — The per-token Python loop is the training bottleneck; a chunked/blocked scan would speed it up substantially.
+12. **TBPTT across batches** — Memory state is reset every batch (`state=None`); carrying it across windows would train long-horizon memory behavior.
 
 ---
 

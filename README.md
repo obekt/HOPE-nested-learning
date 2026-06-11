@@ -14,16 +14,16 @@ Standard Large Language Models (LLMs) suffer from **"Anterograde Amnesia"**—on
 
 **HOPE changes the paradigm.** Instead of just stacking static layers, it models intelligence as a **Continuum Memory System**:
 
-* **Fast Weights (Self-Modifying Layer):** A layer that *updates its own parameters* in real-time as it reads text. It learns your specific context instantly.
-* **Slow Weights (Continuum Memory):** Deep layers that update rarely, storing long-term knowledge (grammar, facts) without catastrophic forgetting.
+* **Fast Weights (Self-Modifying Layer):** An inner-loop learner. Its memory matrix performs one step of online gradient descent (a **delta rule**) per token: it writes only the *prediction error* `v − kM`, with a learned per-token forget gate (α) and inner learning rate (β). Content the memory already knows is not re-written.
+* **Slow Weights (Continuum Memory):** A stack of FFN blocks partitioned into tiers that are updated by the outer optimizer at **different frequencies** (see below), so later tiers consolidate slowly.
 
 ## 🚀 Key Features
 
-* **🧠 Self-Modifying Architecture:** Uses a "Fast Weight" mechanism (Linear Attention dual form) to adapt to the immediate prompt dynamically.
-* **⚡ Fast State-Passing Inference:** Optimized $O(N)$ generation algorithm that carries model memory forward, enabling lightning-fast responses even for long sequences.
-* **🕰️ Continuum Memory System (CMS):** A hierarchy of layers that update at different frequencies (Fast, Medium, Slow), mimicking the human brain's memory consolidation.
+* **🧠 Inner-Loop Fast Memory:** Delta-rule fast-weight memory (error-driven writes, learned gates) that adapts to the immediate prompt token-by-token.
+* **⚡ Fast State-Passing Inference:** Optimized $O(N)$ generation algorithm that carries model memory forward. Verified by an equivalence test (`test_nested.py`): full-sequence forward ≡ token-by-token forward.
+* **🕰️ Continuum Memory System (CMS):** Layers are partitioned into tiers with different optimizer update periods — by default Fast (every step), Medium (every 4 steps), Slow (every 16 steps), with gradients averaged in between. Configured via `cms_tiers` in `CONFIG`.
 * **⚡ Ultra-Lightweight:** Designed to run on **Consumer Hardware** (Mac M1/M2/M3/M4, NVIDIA RTX 3060+, or even CPU).
-* **🔄 Continual Learning:** Capable of training on Dataset A, then Dataset B, without instantly forgetting Dataset A.
+* **🔄 Continual Learning (experimental):** The multi-frequency tiers mean fine-tuning predominantly moves fast tiers while slow tiers consolidate. This mitigates forgetting structurally; it is not yet benchmarked.
 * **📱 Consumer Device Ready:** Optimized <1GB RAM footprint for inference on everyday hardware.
 * **🛡️ Padding Masking & Memory Integrity:** Binary masking in the self-modifying layers prevents "Padding Leakage," ensuring the model's memory stays pure during fine-tuning on isolated datasets.
 * **📝 Automatic Instruction Tuning:** Built-in formatting that turns raw multi-column datasets into structured assistant prompts (Question/Answer/Reasoning).
@@ -146,6 +146,11 @@ CONFIG = {
     "max_steps": 12000,       # Training steps
     "learning_rate": 2e-4,
     "isolate_samples": False, # True for Q&A, False for Wikipedia
+
+    # Nested learning tiers: [n_layers, update_period] pairs.
+    # 8 fast layers (step every opt step), 5 medium (every 4), 3 slow (every 16).
+    # Layer counts must sum to n_layers.
+    "cms_tiers": [[8, 1], [5, 4], [3, 16]],
 }
 ```
 

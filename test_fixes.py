@@ -187,8 +187,8 @@ def test_bug7_lr_schedule():
     print("\n🟢 Bug #7: LR schedule (cosine decay)")
 
     import inspect
-    from train_hope import train
-    source = inspect.getsource(train)
+    from train_hope import train, build_nested_optimizers
+    source = inspect.getsource(train) + inspect.getsource(build_nested_optimizers)
 
     test("Uses cosine decay (math.cos)",
          'math.cos' in source or 'cos(' in source,
