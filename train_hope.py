@@ -64,6 +64,8 @@ CONFIG = {
     "dataset_columns": "title, text",
     "max_samples": 500000,
     "isolate_samples": False,
+    "train_skip_samples": 0,       # articles to skip at stream start (used by the 48k extension, see EXPERIMENT_LOG D4)
+    "val_skip_samples": 100000,    # val split offset in articles; must stay beyond training coverage
 
     "save_path": "hope_foundation.pth",
     "checkpoint_every": 1000,
@@ -651,7 +653,8 @@ def train():
         CONFIG['seq_len'],
         target_columns=CONFIG.get('dataset_columns'),
         max_samples=CONFIG.get('max_samples', 50000),
-        split="train"
+        split="train",
+        skip_samples=CONFIG.get('train_skip_samples', 0),
     )
     train_loader = DataLoader(train_dataset, batch_size=CONFIG['batch_size'])
 
@@ -662,7 +665,7 @@ def train():
         target_columns=CONFIG.get('dataset_columns'),
         max_samples=1000,
         split="train",
-        skip_samples=100000,  # Skip ahead to avoid overlap with training data
+        skip_samples=CONFIG.get('val_skip_samples', 100000),  # skip_samples=100000 by default: skip ahead to avoid overlap with training data
     )
     val_loader = DataLoader(val_dataset, batch_size=CONFIG['batch_size'])
 
