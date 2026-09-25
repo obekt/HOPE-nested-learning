@@ -21,13 +21,14 @@ Standard Large Language Models (LLMs) suffer from **"Anterograde Amnesia"**—on
 
 * **🧠 Inner-Loop Fast Memory:** Delta-rule fast-weight memory (error-driven writes, learned gates) that adapts to the immediate prompt token-by-token.
 * **⚡ Fast State-Passing Inference:** Optimized $O(N)$ generation algorithm that carries model memory forward. Verified by an equivalence test (`test_nested.py`): full-sequence forward ≡ token-by-token forward.
+* **🧮 Chunk-Parallel Fast-Memory Scan:** The delta-rule recurrence (a *gated delta rule*, as in DeltaNet/Gated DeltaNet) is evaluated in an exact chunk-parallel form during training and prompt prefill — 22× faster layer fwd+bwd on Apple MPS (~5× per training step), mathematically identical to the token loop (verified in float64 to ~1e-13 in `test_chunked.py`).
 * **🕰️ Continuum Memory System (CMS):** Layers are partitioned into tiers with different optimizer update periods — by default Fast (every step), Medium (every 4 steps), Slow (every 16 steps), with gradients averaged in between. Configured via `cms_tiers` in `CONFIG`.
 * **⚡ Ultra-Lightweight:** Designed to run on **Consumer Hardware** (Mac M1/M2/M3/M4, NVIDIA RTX 3060+, or even CPU).
 * **🔄 Continual Learning (experimental):** The multi-frequency tiers mean fine-tuning predominantly moves fast tiers while slow tiers consolidate. This mitigates forgetting structurally; it is not yet benchmarked.
 * **📱 Consumer Device Ready:** Optimized <1GB RAM footprint for inference on everyday hardware.
 * **🛡️ Padding Masking & Memory Integrity:** Binary masking in the self-modifying layers prevents "Padding Leakage," ensuring the model's memory stays pure during fine-tuning on isolated datasets.
 * **📝 Automatic Instruction Tuning:** Built-in formatting that turns raw multi-column datasets into structured assistant prompts (Question/Answer/Reasoning).
-* **🔤 GPT-2 Tokenizer:** Uses a real subword tokenizer (50K vocab) instead of byte-level, making training 10-50x more efficient.
+* **🔤 GPT-2 Tokenizer:** Uses a real subword tokenizer (50K vocab, Rust `GPT2TokenizerFast`) instead of byte-level, making training 10-50x more efficient. A background prefetch thread overlaps streaming + tokenization with GPU compute.
 
 ---
 

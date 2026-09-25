@@ -25,6 +25,7 @@ Core idea: Intelligence is a nested optimization problem, not just deep layers. 
 | `generate.py` | CLI one-shot text generation. |
 | `test_model.py` | Quick evaluation on 5 hardcoded test questions. |
 | `test_nested.py` | **Behavioral tests** for the nested-learning core: state-passing equivalence, delta-rule convergence, tier update schedule, checkpoint roundtrip. Run after any change to the model or training loop. |
+| `test_chunked.py` | **Equivalence tests** for the chunk-parallel fast-memory scan: 420-case float64 sweep (chunked == per-token loop over T/chunk/mask/gate combinations), end-to-end layer equivalence, gradient equivalence, dispatch sanity. Run after any change to `SelfModifyingLayer`. |
 | `test_fixes.py` | Regression tests from earlier code reviews. |
 | `requirements.txt` | Python dependencies. |
 
@@ -45,7 +46,14 @@ SelfModifyingLayer (Fast Weights — inner-loop delta rule)
     - Memory update: M_t = α_t·M_{t-1} + β_t·k_tᵀ(v_t − k_t·M_{t-1})
       → one SGD step per token on ||kM − v||²; writes only prediction error
     - Maintains memory matrix: [batch, d_model, d_model]
-    - Optional padding mask: masked tokens leave M untouched
+    - Optional padding mask: masked tokens leave M untouched (in the chunked
+      path the mask is folded into the gates: α←1, β←0 — exactly equivalent)
+    - Evaluation: T>1 uses the EXACT chunk-parallel form (_chunked_delta_scan,
+      gated delta rule / UT-transform style, chunk size CONFIG["fast_chunk_size"]=64);
+      T==1 (incremental generation) uses the per-token loop (_forward_loop).
+      ~22x faster layer fwd+bwd on MPS; verified equal to the loop in float64
+      to ~1e-13 (test_chunked.py). Escape hatches: fast_force_loop=True, and
+      an automatic loop fallback if solve_triangular is unsupported on device.
     ↓
 LayerNorm + Residual
     ↓
@@ -68,6 +76,7 @@ Logits
 3. **State Passing**: During inference, the memory matrix from the SelfModifyingLayer is carried forward token-by-token. This gives O(N) inference instead of O(N²). Verified by an equivalence test in `test_nested.py`.
 4. **Nested optimizers**: `build_nested_optimizers()` creates one AdamW + LR scheduler per tier. The training loop buffers gradients per tier and steps each tier at its period (`train_hope.py`, "NESTED UPDATE" block). Checkpoints store `optimizer_states` (list), `scheduler_states` (list), and `tier_counters`. Old single-optimizer checkpoints still load (model weights only, fresh optimizers).
 5. **Delta-rule memory**: error-driven writes mean repeated content converges instead of accumulating; memory stays bounded without a normalizer.
+6. **Chunked fast-memory scan**: the recurrence is the *gated delta rule* (as in DeltaNet/Gated DeltaNet) and has an exact chunk-parallel form — within a chunk, the per-token write vectors solve a unit lower-triangular system built from pairwise decay ratios exp(G_{t-1}−G_s) ≤ 1 (no division by cumprods, numerically safe). Sequential cost drops from T steps to T/64 batched-matmul steps. Log-α is computed as `F.logsigmoid` on the gate pre-activation (never log(0)). Checkpoint format unchanged. Tests: `test_chunked.py`.
 
 ---
 
@@ -94,6 +103,8 @@ CONFIG = {
     "save_path": "hope_foundation.pth",
     "checkpoint_every": 1000,
     "cms_tiers": [[8, 1], [5, 4], [3, 16]],  # Nested tiers: [n_layers, update_period]. Counts must sum to n_layers.
+    "fast_chunk_size": 64,    # Chunk length for the parallel fast-memory scan (runtime-only; 0 or fast_force_loop=True disables)
+    "fast_force_loop": False, # Debug/benchmark: force the per-token loop for all lengths
 }
 ```
 
@@ -101,7 +112,7 @@ CONFIG = {
 
 At module level in `train_hope.py`:
 ```python
-TOKENIZER = GPT2Tokenizer.from_pretrained("gpt2")
+TOKENIZER = GPT2TokenizerFast.from_pretrained("gpt2")  # Rust tokenizer; ~3x faster, identical vocab/IDs
 TOKENIZER.pad_token = TOKENIZER.eos_token
 PAD_TOKEN_ID = 50256
 EOS_TOKEN_ID = 50256
@@ -144,6 +155,14 @@ The script auto-resumes from `save_path` if it exists.
 
 ## 🧪 How to Test / Inference
 
+Test suites (no checkpoint needed) — run all three after touching the model or training loop:
+
+```bash
+python test_chunked.py && python test_nested.py && python test_fixes.py
+```
+
+Note: training validates from 50 batches cached at startup (`materialize_val_batches` + `run_validation(model, val_batches, device)`) — the val IterableDataset is never re-iterated mid-training.
+
 After training produces a `.pth` file:
 
 ```bash
@@ -173,6 +192,8 @@ python generate.py --prompt "Why is the sky blue?" --temperature 0.7
 | Loss flat at ~10.8 for first 500 steps | Random guessing across 50K vocab is hard | Normal. Wait until LR warms up. Should drop by step 1000. |
 | Out of Memory on MPS | 86M params + large activations | Reduce `batch_size` to 2 or `seq_len` to 256. |
 | Output is gibberish | Model trained without foundation (Q&A only) | Must run full pipeline: Wikipedia first, then Q&A. |
+| ~~Training froze for minutes every 60 s~~ | `run_validation` re-iterated the val IterableDataset, re-streaming 100k skipped HF samples per call | **FIXED**: 50 val batches cached once at startup. |
+| NaN/−inf risk in chunked scan | log(α) with underflowed α | **FIXED**: `F.logsigmoid` on the gate pre-activation; all decay factors are exp of non-positive pairwise differences. |
 
 ---
 
@@ -196,7 +217,7 @@ python generate.py --prompt "Why is the sky blue?" --temperature 0.7
 8. **Knowledge Distillation** — Use GPT-2 or GPT-4o-mini to generate "teacher" answers for the Q&A dataset. Train HOPE to match teacher logits.
 9. ~~**Multi-scale CMS**~~ — **DONE.** Fast/Medium/Slow tiers with per-tier optimizers and update periods (`cms_tiers` in CONFIG, `build_nested_optimizers()`, the NESTED UPDATE block in `train()`). Behavioral tests in `test_nested.py`.
 10. **Benchmark forgetting** — Measure Phase 1 val loss before/after Phase 2 to quantify how much the tiered schedule actually mitigates catastrophic forgetting (claim is currently structural, not measured).
-11. **Parallelize the fast-memory scan** — The per-token Python loop is the training bottleneck; a chunked/blocked scan would speed it up substantially.
+11. ~~**Parallelize the fast-memory scan**~~ — **DONE.** Exact chunk-parallel gated delta rule (`_chunked_delta_scan`, 22× layer / ~5× total step speedup on MPS). Equivalence tests in `test_chunked.py`.
 12. **TBPTT across batches** — Memory state is reset every batch (`state=None`); carrying it across windows would train long-horizon memory behavior.
 
 ---
@@ -232,5 +253,6 @@ This is an **unofficial implementation** for experimentation.
 - **Never hardcode byte-level encoding** — use `TOKENIZER.encode()` and `TOKENIZER.decode()`.
 - **Padding token is EOS token** — `PAD_TOKEN_ID = EOS_TOKEN_ID = 50256`.
 - **Loss masking** — Always use `ignore_index=PAD_TOKEN_ID` in cross-entropy.
-- **Memory efficiency** — The SelfModifyingLayer stores state per timestep. Long `seq_len` + large `batch_size` = high memory.
-- **MPS quirks** — Mac Metal backend sometimes produces NaN in softmax. Use clamping or fallback to CPU if unstable.
+- **Memory efficiency** — The chunked scan keeps only per-chunk `[B, C, C]` intermediates plus the `[B, D, D]` state (no per-timestep lists). Long `seq_len` + large `batch_size` = high memory mostly in embeddings/head activations.
+- **MPS quirks** — Mac Metal backend sometimes produces NaN in softmax. Use clamping or fallback to CPU if unstable. `solve_triangular` fwd+bwd is verified on MPS (torch 2.8); `_tri_solve_ok` auto-falls back to the loop path on devices without it.
+- **Data pipeline** — Training batches come from a `BackgroundBatchPrefetcher` daemon thread (bounded queue, exceptions forwarded to the trainer, `close()` in `finally`). Keep `num_workers=0` on the DataLoader: workers >1 would duplicate the HF stream.
