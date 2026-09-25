@@ -3,11 +3,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, IterableDataset
 from datasets import load_dataset
-from transformers import GPT2Tokenizer
+from transformers import GPT2TokenizerFast
 import time
 import sys
 import os
 import json
+import queue
+import threading
 from datetime import timedelta
 from colorama import Fore, Style, init
 
@@ -18,7 +20,7 @@ init(autoreset=True)
 # 0. TOKENIZER
 # ==========================================
 print(f"{Fore.YELLOW}Loading GPT-2 tokenizer...{Style.RESET_ALL}")
-TOKENIZER = GPT2Tokenizer.from_pretrained("gpt2")
+TOKENIZER = GPT2TokenizerFast.from_pretrained("gpt2")  # Rust tokenizer, ~3x faster; identical vocab/IDs
 TOKENIZER.pad_token = TOKENIZER.eos_token
 TOKENIZER.model_max_length = 1_000_000_000  # Suppress max_length warnings on long articles
 PAD_TOKEN_ID = TOKENIZER.pad_token_id
@@ -448,6 +450,51 @@ class SmartTextDataset(IterableDataset):
                 continue
 
 
+class BackgroundBatchPrefetcher:
+    """Daemon thread iterating a DataLoader into a bounded queue.
+
+    Overlaps HF streaming + tokenization (the Rust fast tokenizer releases
+    the GIL) with GPU compute. Restarts the loader on exhaustion — same
+    semantics as the old StopIteration -> re-iter in the training loop.
+    Producer exceptions are forwarded and re-raised in the consumer.
+    """
+    def __init__(self, loader, maxsize=16):
+        self.loader = loader
+        self.q = queue.Queue(maxsize=maxsize)
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def _run(self):
+        try:
+            while not self._stop.is_set():
+                for batch in self.loader:
+                    if self._stop.is_set():
+                        return
+                    while not self._stop.is_set():
+                        try:
+                            self.q.put(batch, timeout=0.25)
+                            break
+                        except queue.Full:
+                            pass
+        except Exception as e:
+            self.q.put(e)
+
+    def next_batch(self):
+        item = self.q.get()
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    def close(self):
+        self._stop.set()
+        try:
+            while True:
+                self.q.get_nowait()
+        except queue.Empty:
+            pass
+
+
 # ==========================================
 # 4. TRAINING WITH DASHBOARD
 # ==========================================
@@ -637,10 +684,12 @@ def train():
             tier_counters = list(saved)
 
     model.train()
-    iter_loader = iter(train_loader)
+    prefetcher = BackgroundBatchPrefetcher(train_loader, maxsize=2 * CONFIG['accumulate_grad'])
     step = start_step
     running_loss = 0
     steps_since_display = 0
+    pending_losses = []   # detached GPU scalars; summed with ONE sync per dashboard refresh
+    preview_src = None
     val_loss = None
 
     start_time = time.time()
@@ -655,15 +704,11 @@ def train():
             model.zero_grad(set_to_none=True)
 
             for _ in range(CONFIG['accumulate_grad']):
-                try:
-                    batch = next(iter_loader)
-                except StopIteration:
-                    iter_loader = iter(train_loader)
-                    batch = next(iter_loader)
+                batch = prefetcher.next_batch()  # restarts the stream on exhaustion
 
                 inputs = batch[:, :-1].to(DEVICE)
                 targets = batch[:, 1:].to(DEVICE)
-                current_preview = decode_preview(inputs)
+                preview_src = inputs  # decoded only at dashboard refresh (avoids per-microbatch MPS sync)
 
                 if scaler:
                     with torch.cuda.amp.autocast():
@@ -675,7 +720,7 @@ def train():
                     loss = F.cross_entropy(logits.reshape(-1, CONFIG['vocab_size']), targets.reshape(-1), ignore_index=PAD_TOKEN_ID)
                     loss.backward()
 
-                running_loss += loss.item() / CONFIG['accumulate_grad']
+                pending_losses.append(loss.detach() / CONFIG['accumulate_grad'])
 
             # Unscale once so buffered gradients are in true scale
             if scaler:
@@ -688,20 +733,26 @@ def train():
             # When a tier's period elapses: load the averaged gradient and step.
             for i, (opt, sch, period, params) in enumerate(
                     zip(optimizers, schedulers, tier_periods, tier_param_lists)):
+                bufs, grads = [], []
                 for buf, p in zip(grad_buffers[i], params):
                     if p.grad is not None:
-                        buf.add_(p.grad)
+                        bufs.append(buf)
+                        grads.append(p.grad)
+                if bufs:
+                    torch._foreach_add_(bufs, grads)  # fused harvest (one kernel launch)
                 tier_counters[i] += 1
 
                 if tier_counters[i] >= period:
+                    torch._foreach_div_(grad_buffers[i], period)
                     for buf, p in zip(grad_buffers[i], params):
-                        p.grad = buf.div_(period)
+                        # Aliasing is safe: next iteration's zero_grad(set_to_none=True)
+                        # drops these refs before anything reads .grad again.
+                        p.grad = buf
                     if scaler:
                         scaler.step(opt)  # grads already unscaled; keeps inf-skip safety
                     else:
                         opt.step()
-                    for j in range(len(grad_buffers[i])):
-                        grad_buffers[i][j] = torch.zeros_like(params[j])
+                    torch._foreach_zero_(grad_buffers[i])  # reuse buffers in place
                     tier_counters[i] = 0
                 # Scheduler ticks every step for all tiers so LR stays in sync
                 sch.step()
@@ -726,6 +777,13 @@ def train():
                 print(f"\n{Fore.CYAN}Checkpoint saved at step {step}{Style.RESET_ALL}")
 
             if time.time() - last_update_time > 0.2:
+                if pending_losses:
+                    # Single GPU->CPU sync per refresh (was one .item() per microbatch);
+                    # taken before measuring dt so the timing stays honest.
+                    running_loss += torch.stack(pending_losses).sum().item()
+                    pending_losses.clear()
+                if preview_src is not None:
+                    current_preview = decode_preview(preview_src)
                 dt = time.time() - t0
                 dt = max(dt, 0.001)
                 tokens_per_sec = (CONFIG['batch_size'] * CONFIG['seq_len'] * CONFIG['accumulate_grad']) / dt
@@ -747,6 +805,8 @@ def train():
 
     except KeyboardInterrupt:
         pass
+    finally:
+        prefetcher.close()
 
     print(f"\n{Fore.GREEN}Saving to {CONFIG['save_path']}...{Style.RESET_ALL}")
     torch.save(make_checkpoint(model, optimizers, schedulers, tier_counters, step, best_val_loss), CONFIG['save_path'])
