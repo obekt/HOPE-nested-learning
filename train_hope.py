@@ -500,22 +500,38 @@ def log_to_file(msg):
         pass
 
 
-def run_validation(model, val_loader, device):
+VAL_BATCH_COUNT = 50
+
+
+def materialize_val_batches(val_loader):
+    """Cache the validation batches ONCE at startup.
+
+    The val IterableDataset re-streams from HF (including its skip_samples
+    lead-in) every time it is re-iterated, so validating every 60 s used to
+    stall training for minutes per call. HF streaming without shuffle is
+    deterministic, so the cached batches are exactly what re-streaming
+    produced before — same metric, no stall.
+    """
+    batches = []
+    for batch in val_loader:
+        batches.append(batch)
+        if len(batches) >= VAL_BATCH_COUNT:
+            break
+    return batches
+
+
+def run_validation(model, val_batches, device):
     model.eval()
     total_loss = 0.0
-    count = 0
     with torch.no_grad():
-        for batch in val_loader:
+        for batch in val_batches:
             inputs = batch[:, :-1].to(device)
             targets = batch[:, 1:].to(device)
             logits, _ = model(inputs)
             loss = F.cross_entropy(logits.reshape(-1, CONFIG['vocab_size']), targets.reshape(-1), ignore_index=PAD_TOKEN_ID)
             total_loss += loss.item()
-            count += 1
-            if count >= 50:
-                break
     model.train()
-    return total_loss / max(count, 1)
+    return total_loss / max(len(val_batches), 1)
 
 
 def make_checkpoint(model, optimizers, schedulers, tier_counters, step, best_val_loss):
@@ -602,6 +618,10 @@ def train():
         skip_samples=100000,  # Skip ahead to avoid overlap with training data
     )
     val_loader = DataLoader(val_dataset, batch_size=CONFIG['batch_size'])
+
+    print(f"{Fore.YELLOW}Materializing {VAL_BATCH_COUNT} validation batches (one-time stream + skip)...{Style.RESET_ALL}")
+    val_batches = materialize_val_batches(val_loader)
+    val_loader = None  # never iterated again — re-iteration would re-stream from HF
 
     scaler = torch.cuda.amp.GradScaler() if DEVICE == "cuda" else None
 
@@ -692,7 +712,7 @@ def train():
             steps_since_display += 1
 
             if time.time() - last_val_time > 60:
-                val_loss = run_validation(model, val_loader, DEVICE)
+                val_loss = run_validation(model, val_batches, DEVICE)
                 last_val_time = time.time()
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
