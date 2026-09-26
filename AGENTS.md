@@ -27,6 +27,9 @@ Core idea: Intelligence is a nested optimization problem, not just deep layers. 
 | `test_nested.py` | **Behavioral tests** for the nested-learning core: state-passing equivalence, delta-rule convergence, tier update schedule, checkpoint roundtrip. Run after any change to the model or training loop. |
 | `test_chunked.py` | **Equivalence tests** for the chunk-parallel fast-memory scan: 420-case float64 sweep (chunked == per-token loop over T/chunk/mask/gate combinations), end-to-end layer equivalence, gradient equivalence, dispatch sanity. Run after any change to `SelfModifyingLayer`. |
 | `test_fixes.py` | Regression tests from earlier code reviews. |
+| `probe_model.py` | Learning-probe harness: 20 factual cloze probes + Q&A/generation samples against any checkpoint (CPU copy, no training interference). Appends `probe_stats.jsonl`. `--report` prints the accumulated table. |
+| `extend_training.py` / `extend_phase2.py` | Marathon drivers: resume foundation training with new budget/data/val protocol (D4 in `EXPERIMENT_LOG.md`), then re-seed + run extended Q&A fine-tune. |
+| `EXPERIMENT.md` / `EXPERIMENT_LOG.md` | The 48k-marathon experiment report (public) and its decision/measurement log (D1–D5). |
 | `requirements.txt` | Python dependencies. |
 
 ---

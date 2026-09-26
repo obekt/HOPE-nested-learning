@@ -6,6 +6,8 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![Pytorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
 
+📊 **New: [The HOPE Marathon](EXPERIMENT.md)** — a fully documented 15-hour training experiment on one Mac (48k steps, ~786M tokens): the 5× speedup methodology, hour-by-hour learning curves, factual-knowledge emergence ranks, and an honest negative result on factual recall at consumer data budgets. Trained checkpoints are on the [`v0.1-marathon` release](https://github.com/obekt/HOPE-nested-learning/releases).
+
 ## 📖 What is this?
 
 This is a clean, from-scratch PyTorch implementation of the **HOPE architecture**, based on the groundbreaking paper *"Nested Learning: The Illusion of Deep Learning"* (Behrouz et al., 2024).
