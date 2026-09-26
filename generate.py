@@ -9,50 +9,48 @@ import torch.nn.functional as F
 import argparse
 import sys
 import os
-from train_hope import HOPE, CONFIG, DEVICE, TOKENIZER, EOS_TOKEN_ID
+from train_hope import (
+    HOPE, CONFIG, DEVICE, TOKENIZER, EOS_TOKEN_ID,
+    load_model_for_inference, sample_next_token, maybe_compile_for_steps,
+)
 
 
-def load_model(path):
-    model = HOPE(CONFIG['vocab_size'], CONFIG['d_model'], CONFIG['n_layers'])
-    checkpoint = torch.load(path, map_location=DEVICE)
-
-    if isinstance(checkpoint, dict) and 'model_state' in checkpoint:
-        state_dict = checkpoint['model_state']
-    else:
-        state_dict = checkpoint
-
-    model.load_state_dict(state_dict, strict=True)
-    model.to(DEVICE)
-    model.eval()
+def load_model(path, dtype=torch.bfloat16):
+    """Shared strict loader (strict=True inside load_model_for_inference)."""
+    model, _ = load_model_for_inference(path, device=DEVICE, dtype=dtype)
     return model
 
 
-def generate(model, prompt, max_new_tokens=200, temperature=0.7):
+def generate(model, prompt, max_new_tokens=200, temperature=0.7,
+             repetition_penalty=1.15, step_model=None):
     full_prompt = f"Question: {prompt.strip()}\nAnswer: "
     input_ids = TOKENIZER.encode(full_prompt, return_tensors="pt").to(DEVICE)
+    step_model = step_model or model
 
     generated = []
+    prev_tokens = input_ids[0].tolist()
 
     with torch.no_grad():
-        logits, state = model(input_ids)
+        # last_only: CMS stack + head on the final position only (2.3x prefill)
+        logits, state = model(input_ids, last_only=True)
 
-    last_token_logits = logits[:, -1, :] / max(0.01, temperature)
-    probs = F.softmax(last_token_logits, dim=-1)
-    next_token = torch.multinomial(probs, num_samples=1)
+    next_token = sample_next_token(logits, temperature=temperature,
+                                   repetition_penalty=repetition_penalty,
+                                   prev_tokens=prev_tokens)
 
     for _ in range(max_new_tokens):
         token_int = next_token.item()
         if token_int == EOS_TOKEN_ID:
             break
         generated.append(token_int)
+        prev_tokens.append(token_int)
 
         with torch.no_grad():
-            x = next_token
-            logits, state = model(x, state=state)
+            logits, state = step_model(next_token, state=state, last_only=True)
 
-        last_token_logits = logits[:, -1, :] / max(0.01, temperature)
-        probs = F.softmax(last_token_logits, dim=-1)
-        next_token = torch.multinomial(probs, num_samples=1)
+        next_token = sample_next_token(logits, temperature=temperature,
+                                       repetition_penalty=repetition_penalty,
+                                       prev_tokens=prev_tokens)
 
     return TOKENIZER.decode(generated, skip_special_tokens=True)
 
@@ -63,6 +61,12 @@ def main():
     parser.add_argument("--max-tokens", type=int, default=200, help="Maximum tokens to generate")
     parser.add_argument("--temperature", type=float, default=0.7, help="Sampling temperature")
     parser.add_argument("--model", type=str, default=None, help="Path to model checkpoint")
+    parser.add_argument("--dtype", choices=["bf16", "fp32"], default="bf16",
+                        help="bf16 (default): faster, validated quality-identical; fp32: legacy")
+    parser.add_argument("--repetition-penalty", type=float, default=1.15,
+                        help="1.0 disables; 1.1-1.3 tames repetition loops")
+    parser.add_argument("--no-compile", action="store_true",
+                        help="disable torch.compile for generation steps")
     args = parser.parse_args()
 
     model_path = args.model or CONFIG['save_path']
@@ -75,12 +79,15 @@ def main():
         print("Train first with: python train_hope.py")
         sys.exit(1)
 
-    model = load_model(model_path)
-    print(f"Generating with {sum(p.numel() for p in model.parameters()) / 1e6:.1f}M parameters on {DEVICE}\n")
+    dtype = torch.bfloat16 if args.dtype == "bf16" else torch.float32
+    model = load_model(model_path, dtype=dtype)
+    step_model = model if args.no_compile else maybe_compile_for_steps(model)
+    print(f"Generating with {sum(p.numel() for p in model.parameters()) / 1e6:.1f}M parameters on {DEVICE} ({args.dtype})\n")
     print(f"Prompt: {args.prompt}\n")
     print("-" * 40)
 
-    result = generate(model, args.prompt, args.max_tokens, args.temperature)
+    result = generate(model, args.prompt, args.max_tokens, args.temperature,
+                      repetition_penalty=args.repetition_penalty, step_model=step_model)
     print(result)
 
 

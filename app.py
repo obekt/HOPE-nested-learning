@@ -3,18 +3,15 @@ import gradio as gr
 import os
 import sys
 
-from train_hope import HOPE, CONFIG, DEVICE, TOKENIZER, EOS_TOKEN_ID
+from train_hope import (
+    HOPE, CONFIG, DEVICE, TOKENIZER, EOS_TOKEN_ID,
+    load_model_for_inference, sample_next_token, maybe_compile_for_steps,
+)
 
 MODEL_FILENAME = CONFIG['save_path']
 BEST_MODEL_FILENAME = MODEL_FILENAME.replace('.pth', '_best.pth')
 
 print(f"Loading HOPE Model from {MODEL_FILENAME}...")
-
-try:
-    model = HOPE(CONFIG['vocab_size'], CONFIG['d_model'], CONFIG['n_layers'])
-except NameError:
-    print("Error: Could not find HOPE class. Make sure train_hope.py is in the same folder.")
-    sys.exit(1)
 
 load_path = MODEL_FILENAME
 if os.path.exists(BEST_MODEL_FILENAME):
@@ -29,19 +26,15 @@ if not os.path.exists(load_path):
     print("Please train a model first with: python train_hope.py")
     sys.exit(1)
 
-checkpoint = torch.load(load_path, map_location=DEVICE)
+try:
+    # bf16 weights (validated quality-identical); shared loader is strict=True
+    model, checkpoint = load_model_for_inference(load_path, device=DEVICE, dtype=torch.bfloat16)
+except RuntimeError as e:
+    print(f"Architecture Mismatch! Your saved model differs from CONFIG. Details: {e}")
+    sys.exit(1)
 
-if isinstance(checkpoint, dict) and 'model_state' in checkpoint:
-    print("Detected Smart Checkpoint. Unpacking weights...")
-    state_dict = checkpoint['model_state']
-else:
-    print("Detected Legacy Checkpoint.")
-    state_dict = checkpoint
-
-model.load_state_dict(state_dict, strict=True)
-model.to(DEVICE)
-model.eval()
-print("Model loaded successfully!")
+step_model = maybe_compile_for_steps(model)
+print(f"Model loaded successfully! ({load_path})")
 
 
 def predict(message, history, temperature, max_tokens, show_reasoning):
@@ -51,19 +44,19 @@ def predict(message, history, temperature, max_tokens, show_reasoning):
     full_prompt = f"Question: {message.strip()}\nAnswer: "
     input_ids = TOKENIZER.encode(full_prompt, return_tensors="pt").to(DEVICE)
     generated_ids = []
+    prev_tokens = input_ids[0].tolist()
 
     with torch.no_grad():
-        logits, state = model(input_ids)
+        logits, state = model(input_ids, last_only=True)
 
-    last_token_logits = logits[:, -1, :] / max(0.01, temperature)
-    probs = torch.softmax(last_token_logits, dim=-1)
-    next_token = torch.multinomial(probs, num_samples=1)
+    next_token = sample_next_token(logits, temperature=temperature, prev_tokens=prev_tokens)
 
     for _ in range(max_tokens):
         token_int = next_token.item()
         if token_int == EOS_TOKEN_ID:
             break
         generated_ids.append(token_int)
+        prev_tokens.append(token_int)
 
         text = TOKENIZER.decode(generated_ids, skip_special_tokens=True)
         if not show_reasoning and "Reasoning:" in text:
@@ -75,12 +68,9 @@ def predict(message, history, temperature, max_tokens, show_reasoning):
         yield text
 
         with torch.no_grad():
-            x = next_token
-            logits, state = model(x, state=state)
+            logits, state = step_model(next_token, state=state, last_only=True)
 
-        last_token_logits = logits[:, -1, :] / max(0.01, temperature)
-        probs = torch.softmax(last_token_logits, dim=-1)
-        next_token = torch.multinomial(probs, num_samples=1)
+        next_token = sample_next_token(logits, temperature=temperature, prev_tokens=prev_tokens)
 
 
 demo = gr.ChatInterface(

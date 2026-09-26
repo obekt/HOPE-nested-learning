@@ -106,6 +106,7 @@ def load_checkpoint(path):
 
 def next_token_probs(model, cue):
     ids = th.TOKENIZER.encode(cue, return_tensors="pt")
+    ids = ids.to(next(model.parameters()).device)  # works for CPU and MPS/GPU probes
     with torch.no_grad():
         logits, _ = model(ids)
     return F.softmax(logits[0, -1].float(), dim=-1)
@@ -120,6 +121,7 @@ def rank_and_prob(probs, token_id):
 def generate(model, cue, n_tokens=48, temp=0.7, topk=40, seed=42):
     torch.manual_seed(seed)
     ids = th.TOKENIZER.encode(cue, return_tensors="pt")
+    ids = ids.to(next(model.parameters()).device)
     with torch.no_grad():
         logits, state = model(ids)
         out = []

@@ -26,6 +26,7 @@ Core idea: Intelligence is a nested optimization problem, not just deep layers. 
 | `test_model.py` | Quick evaluation on 5 hardcoded test questions. |
 | `test_nested.py` | **Behavioral tests** for the nested-learning core: state-passing equivalence, delta-rule convergence, tier update schedule, checkpoint roundtrip. Run after any change to the model or training loop. |
 | `test_chunked.py` | **Equivalence tests** for the chunk-parallel fast-memory scan: 420-case float64 sweep (chunked == per-token loop over T/chunk/mask/gate combinations), end-to-end layer equivalence, gradient equivalence, dispatch sanity. Run after any change to `SelfModifyingLayer`. |
+| `test_inference.py` | Tests for the inference stack: `last_only` prefill equivalence, sampler behavior (top-k/top-p/repetition penalty/no-mutation/NaN guards), bf16 numerics + fp32 memory state. |
 | `test_fixes.py` | Regression tests from earlier code reviews. |
 | `probe_model.py` | Learning-probe harness: 20 factual cloze probes + Q&A/generation samples against any checkpoint (CPU copy, no training interference). Appends `probe_stats.jsonl`. `--report` prints the accumulated table. |
 | `extend_training.py` / `extend_phase2.py` | Marathon drivers: resume foundation training with new budget/data/val protocol (D4 in `EXPERIMENT_LOG.md`), then re-seed + run extended Q&A fine-tune. |
@@ -80,6 +81,12 @@ Logits
 4. **Nested optimizers**: `build_nested_optimizers()` creates one AdamW + LR scheduler per tier. The training loop buffers gradients per tier and steps each tier at its period (`train_hope.py`, "NESTED UPDATE" block). Checkpoints store `optimizer_states` (list), `scheduler_states` (list), and `tier_counters`. Old single-optimizer checkpoints still load (model weights only, fresh optimizers).
 5. **Delta-rule memory**: error-driven writes mean repeated content converges instead of accumulating; memory stays bounded without a normalizer.
 6. **Chunked fast-memory scan**: the recurrence is the *gated delta rule* (as in DeltaNet/Gated DeltaNet) and has an exact chunk-parallel form — within a chunk, the per-token write vectors solve a unit lower-triangular system built from pairwise decay ratios exp(G_{t-1}−G_s) ≤ 1 (no division by cumprods, numerically safe). Sequential cost drops from T steps to T/64 batched-matmul steps. Log-α is computed as `F.logsigmoid` on the gate pre-activation (never log(0)). Checkpoint format unchanged. Tests: `test_chunked.py`.
+7. **Inference stack** (all in `train_hope.py`, shared by chat/generate/app/test_model):
+   - `load_model_for_inference(path, dtype=torch.bfloat16)` — single strict loader. bf16 weights validated quality-identical on MPS (100% greedy agreement, identical probe metrics). The recurrent scan and the [D,D] memory state **always run in fp32** regardless of weight dtype (MPS `solve_triangular` is fp32-only — bf16 hard-aborts the process; fp32 state also accumulates more accurately).
+   - `HOPE.forward(..., last_only=True)` — runs CMS stack + head on the final position only. Valid because CMS blocks are position-wise; only the fast memory mixes time. **2.5× faster prefill** at T=512.
+   - `maybe_compile_for_steps(model)` — `torch.compile(dynamic=False)` for the T=1 generation steps (~1.15× on MPS; generation is kernel-launch-bound). **Prefill must stay eager**: inductor cannot lower `linalg_solve_triangular` on MPS. Falls back to eager automatically.
+   - `sample_next_token(...)` — temperature + top-k(40) + top-p(0.9) + repetition penalty(1.15) with the MPS `multinomial` NaN guard (clamp + renormalize). Clones logits (never mutates caller tensors).
+   - Measured (86M model, MPS): prefill T=512 12.8→5.1 ms, generation 387→~500 tok/s.
 
 ---
 
@@ -190,7 +197,7 @@ python generate.py --prompt "Why is the sky blue?" --temperature 0.7
 
 | Issue | Cause | Fix |
 |-------|-------|-----|
-| `probability tensor contains inf, nan` | MPS numerical instability + top-p sampling | Simplified sampling in `generate.py`. If it recurs, add `torch.clamp(probs, min=1e-10)` before `multinomial`. |
+| ~~`probability tensor contains inf, nan`~~ | MPS numerical instability + top-p sampling | **FIXED**: all scripts sample via `sample_next_token()` in `train_hope.py` — fp32 math, `clamp(probs, min=1e-10)` + renormalize before `multinomial`. |
 | GPT2Tokenizer max_length warning | Long Wikipedia articles exceed tokenizer's default `model_max_length` | Set `TOKENIZER.model_max_length = 1_000_000_000` |
 | Loss flat at ~10.8 for first 500 steps | Random guessing across 50K vocab is hard | Normal. Wait until LR warms up. Should drop by step 1000. |
 | Out of Memory on MPS | 86M params + large activations | Reduce `batch_size` to 2 or `seq_len` to 256. |
@@ -257,5 +264,5 @@ This is an **unofficial implementation** for experimentation.
 - **Padding token is EOS token** — `PAD_TOKEN_ID = EOS_TOKEN_ID = 50256`.
 - **Loss masking** — Always use `ignore_index=PAD_TOKEN_ID` in cross-entropy.
 - **Memory efficiency** — The chunked scan keeps only per-chunk `[B, C, C]` intermediates plus the `[B, D, D]` state (no per-timestep lists). Long `seq_len` + large `batch_size` = high memory mostly in embeddings/head activations.
-- **MPS quirks** — Mac Metal backend sometimes produces NaN in softmax. Use clamping or fallback to CPU if unstable. `solve_triangular` fwd+bwd is verified on MPS (torch 2.8); `_tri_solve_ok` auto-falls back to the loop path on devices without it.
+- **MPS quirks** — Mac Metal backend sometimes produces NaN in softmax. Use clamping or fallback to CPU if unstable. `solve_triangular` fwd+bwd is verified on MPS (torch 2.8) **for fp32 only**: a bf16 call trips a Metal assertion that ABORTS the process (not catchable from Python) — so the scan always casts to fp32 and `_tri_solve_ok` only ever probes fp32. `torch.compile` (inductor) cannot lower `solve_triangular` on MPS either — compile the T=1 step path only, keep prefill eager.
 - **Data pipeline** — Training batches come from a `BackgroundBatchPrefetcher` daemon thread (bounded queue, exceptions forwarded to the trainer, `close()` in `finally`). Keep `num_workers=0` on the DataLoader: workers >1 would duplicate the HF stream.

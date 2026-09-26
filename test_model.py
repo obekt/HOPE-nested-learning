@@ -6,19 +6,15 @@ Runs the model on a set of sample questions and prints outputs.
 import torch
 import os
 import sys
-from train_hope import HOPE, CONFIG, DEVICE, TOKENIZER, EOS_TOKEN_ID
+from train_hope import (
+    HOPE, CONFIG, DEVICE, TOKENIZER, EOS_TOKEN_ID,
+    load_model_for_inference, sample_next_token,
+)
 
 
 def load_model(path):
-    model = HOPE(CONFIG['vocab_size'], CONFIG['d_model'], CONFIG['n_layers'])
-    checkpoint = torch.load(path, map_location=DEVICE)
-    if isinstance(checkpoint, dict) and 'model_state' in checkpoint:
-        state_dict = checkpoint['model_state']
-    else:
-        state_dict = checkpoint
-    model.load_state_dict(state_dict, strict=True)
-    model.to(DEVICE)
-    model.eval()
+    """Shared strict loader (strict=True inside load_model_for_inference), bf16."""
+    model, _ = load_model_for_inference(path, device=DEVICE, dtype=torch.bfloat16)
     return model
 
 
@@ -27,27 +23,24 @@ def generate(model, prompt, max_new_tokens=200, temperature=0.7):
     input_ids = TOKENIZER.encode(full_prompt, return_tensors="pt").to(DEVICE)
 
     generated = []
+    prev_tokens = input_ids[0].tolist()
 
     with torch.no_grad():
-        logits, state = model(input_ids)
+        logits, state = model(input_ids, last_only=True)
 
-    last_token_logits = logits[:, -1, :] / max(0.01, temperature)
-    probs = torch.softmax(last_token_logits, dim=-1)
-    next_token = torch.multinomial(probs, num_samples=1)
+    next_token = sample_next_token(logits, temperature=temperature, prev_tokens=prev_tokens)
 
     for _ in range(max_new_tokens):
         token_int = next_token.item()
         if token_int == EOS_TOKEN_ID:
             break
         generated.append(token_int)
+        prev_tokens.append(token_int)
 
         with torch.no_grad():
-            x = next_token
-            logits, state = model(x, state=state)
+            logits, state = model(next_token, state=state, last_only=True)
 
-        last_token_logits = logits[:, -1, :] / max(0.01, temperature)
-        probs = torch.softmax(last_token_logits, dim=-1)
-        next_token = torch.multinomial(probs, num_samples=1)
+        next_token = sample_next_token(logits, temperature=temperature, prev_tokens=prev_tokens)
 
     return TOKENIZER.decode(generated, skip_special_tokens=True)
 

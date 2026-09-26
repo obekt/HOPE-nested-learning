@@ -22,7 +22,7 @@ Standard Large Language Models (LLMs) suffer from **"Anterograde Amnesia"**—on
 ## 🚀 Key Features
 
 * **🧠 Inner-Loop Fast Memory:** Delta-rule fast-weight memory (error-driven writes, learned gates) that adapts to the immediate prompt token-by-token.
-* **⚡ Fast State-Passing Inference:** Optimized $O(N)$ generation algorithm that carries model memory forward. Verified by an equivalence test (`test_nested.py`): full-sequence forward ≡ token-by-token forward.
+* **⚡ Fast State-Passing Inference:** Optimized $O(N)$ generation algorithm that carries model memory forward. Verified by an equivalence test (`test_nested.py`): full-sequence forward ≡ token-by-token forward. On Apple MPS: **bf16 weights** (validated quality-identical, fp32 memory state), **last-position-only prefill** (2.5× faster at T=512), optional `torch.compile` for generation steps, and nucleus+repetition-penalty sampling — ~500 tok/s generation end-to-end.
 * **🧮 Chunk-Parallel Fast-Memory Scan:** The delta-rule recurrence (a *gated delta rule*, as in DeltaNet/Gated DeltaNet) is evaluated in an exact chunk-parallel form during training and prompt prefill — 22× faster layer fwd+bwd on Apple MPS (~5× per training step), mathematically identical to the token loop (verified in float64 to ~1e-13 in `test_chunked.py`).
 * **🕰️ Continuum Memory System (CMS):** Layers are partitioned into tiers with different optimizer update periods — by default Fast (every step), Medium (every 4 steps), Slow (every 16 steps), with gradients averaged in between. Configured via `cms_tiers` in `CONFIG`.
 * **⚡ Ultra-Lightweight:** Designed to run on **Consumer Hardware** (Mac M1/M2/M3/M4, NVIDIA RTX 3060+, or even CPU).

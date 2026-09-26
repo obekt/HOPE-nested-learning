@@ -135,6 +135,52 @@ Question: What is the capital of France?
 Answer:  It's a social media when you're older and can learn about what they can do.
 ```
 
+### Addendum (2026-09-26, post-verdict): greedy decoding reveals a correct answer
+
+The verdict table above was measured with the probe harness's *sampled* decoding
+(temp 0.7, top-k 40). During the inference-optimization pass we re-ran the Q&A
+probes **greedily** (argmax) on `hope_final_best.pth`:
+
+```
+Question: Why is the sky blue?
+Answer:  Sunlight gets scattered by air molecules, making blue light more visible.
+Reasoning: Blue light has shorter wavelengths that coll[ide with gas molecules…]
+```
+
+— a fully correct Rayleigh-scattering answer with correct reasoning, and the
+project's canonical demo question. Two honest caveats, both measured:
+
+1. **It is memorization of the fine-tuning set, not generalization.** Other
+   questions ("What happens when water freezes?", "What do plants need to grow?")
+   still produce dataset-flavored non-answers under greedy decoding. The sky-blue
+   Q&A is (near-)verbatim in the micro dataset.
+2. **It is prompt-format fragile.** Removing/adding a single trailing space after
+   "Answer:" changes the first-token distribution (top-1 probability is only ~9%
+   in the flat regime), and sampled decoding at temp 0.7 usually misses the
+   correct continuation entirely.
+
+Criterion 3 therefore stays **FAIL** ("reliably answer"), but the accurate
+characterization is: *the model can retrieve a correct, well-reasoned answer for
+at least one canonical question under greedy decoding; retrieval is format-
+sensitive and does not generalize across questions.* Practical tip: use low
+temperature (≤0.3) or greedy with this checkpoint.
+
+### Addendum: inference speedups (measured, 86M model on Apple MPS)
+
+| Path | Before | After | Gain |
+|---|---|---|---|
+| Prefill T=512 | 12.8 ms | 5.1 ms | **2.5×** (`last_only`: CMS+head on final position — valid because CMS blocks are position-wise) |
+| Prefill T=12 | 4.0 ms | 2.4 ms | 1.6× |
+| Generation | 387 tok/s | ~500 tok/s | **1.3×** (bf16 weights + `torch.compile`d T=1 steps) |
+
+Quality gates passed before shipping defaults: bf16-vs-fp32 **100% greedy token
+agreement** on 5 prompts and **identical** factual-probe metrics (top-5 20%, MRR
+0.165). The delta-rule scan and memory state stay fp32 under bf16 weights — MPS
+`solve_triangular` is fp32-only (bf16 trips an uncatchable Metal assert), and
+fp32 state accumulates more accurately. Sampling upgraded to top-k + nucleus +
+repetition penalty (fixes the repetition degeneration seen in §3 finding 5's era:
+*"the character of the character…"*).
+
 ## 5. Artifacts & reproduction
 
 **Model checkpoints** (GitHub Release `v0.1-marathon`, ~986 MB each):

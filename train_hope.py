@@ -226,7 +226,18 @@ class SelfModifyingLayer(nn.Module):
         z_alpha = self.gate_alpha(x) + 4.0              # [B, T, 1] pre-activation
         beta = torch.sigmoid(self.gate_beta(x) - 2.0)   # [B, T, 1]
 
-        memory = state if state is not None else torch.zeros(batch_size, self.dim, self.dim, device=x.device, dtype=x.dtype)
+        # The recurrent scan always runs in fp32, regardless of parameter
+        # dtype: (a) MPS solve_triangular is fp32-only (hard assert on bf16),
+        # (b) the [D, D] memory state accumulates over the whole context and
+        # benefits from fp32 precision. Weight-bandwidth savings (bf16) stay
+        # in the FFN/head, which dominate inference cost. For fp32 models the
+        # casts below are no-ops — training behavior is bit-identical.
+        q, k, v = q.float(), k.float(), v.float()
+        z_alpha, beta = z_alpha.float(), beta.float()
+        if mask is not None:
+            mask = mask.float()
+
+        memory = state if state is not None else torch.zeros(batch_size, self.dim, self.dim, device=x.device, dtype=torch.float32)
 
         if seq_len == 0:
             return torch.zeros_like(x), memory
@@ -236,7 +247,10 @@ class SelfModifyingLayer(nn.Module):
             seq_len > 1
             and chunk_size
             and not CONFIG.get("fast_force_loop", False)
-            and _tri_solve_ok(x.device, x.dtype)
+            # probe fp32: the scan always runs in fp32 (see above), and probing
+            # with bf16 would hard-abort on MPS (solve_triangular is fp32-only;
+            # the Metal assert is not catchable from Python)
+            and _tri_solve_ok(x.device, torch.float32)
         )
         if use_chunked:
             # logsigmoid on the pre-activation is exactly log(sigmoid(.)) and
@@ -247,7 +261,8 @@ class SelfModifyingLayer(nn.Module):
             alpha = torch.sigmoid(z_alpha)   # [B, T, 1]
             out, memory = self._forward_loop(q, k, v, alpha, beta, memory, mask)
 
-        return self.proj_out(out), memory
+        # scan output is fp32; proj_out runs in the model's weight dtype
+        return self.proj_out(out.to(self.proj_out.weight.dtype)), memory
 
 
 class ContinuumMemoryBlock(nn.Module):
@@ -316,15 +331,118 @@ class HOPE(nn.Module):
             elif isinstance(module, nn.Embedding):
                 nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, x, state=None, mask=None):
+    def forward(self, x, state=None, mask=None, last_only=False):
+        """last_only=True runs the CMS stack + head on the FINAL position only.
+
+        Valid because CMS blocks are position-wise (FFN + LayerNorm — no
+        cross-position mixing; only the fast memory integrates time), so for
+        generation prefill the earlier positions' logits are wasted work.
+        Outputs for the last position are identical either way.
+        """
         if mask is None:
-            mask = (x != PAD_TOKEN_ID).float()
+            mask = (x != PAD_TOKEN_ID).float()  # scan casts internally; memory is always fp32
         h = self.embedding(x)
         fast_out, new_state = self.fast_memory(h, state=state, mask=mask)
         h = self.norm_fast(h + fast_out)
+        if last_only:
+            h = h[:, -1:, :]
         for layer in self.cms_layers:
             h = layer(h)
         return self.head(h), new_state
+
+
+# ==========================================
+# 2b. SHARED INFERENCE HELPERS
+# ==========================================
+
+def resolve_checkpoint_path(path=None):
+    """CONFIG['save_path'] with fallback to the *_best.pth variant."""
+    path = path or CONFIG['save_path']
+    if not os.path.exists(path):
+        best = path.replace('.pth', '_best.pth')
+        if os.path.exists(best):
+            return best
+    return path
+
+
+def load_model_for_inference(path=None, device=DEVICE, dtype=torch.bfloat16):
+    """Shared strict checkpoint loader for all inference scripts.
+
+    dtype=torch.bfloat16 halves per-token weight traffic (generation is
+    memory-bandwidth-bound: ~245 MB of reads/token in fp32) for ~2x tok/s on
+    Apple MPS. Pass dtype=torch.float32 for bit-exact legacy behavior.
+    Returns (model, checkpoint_dict_or_None). Loading is always strict=True.
+    """
+    path = resolve_checkpoint_path(path)
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"No model checkpoint at {path}. Train first: python train_hope.py")
+    checkpoint = torch.load(path, map_location="cpu", weights_only=False)
+    state_dict = checkpoint['model_state'] if isinstance(checkpoint, dict) and 'model_state' in checkpoint else checkpoint
+    tiers = checkpoint.get('cms_tiers') if isinstance(checkpoint, dict) else None
+    model = HOPE(CONFIG['vocab_size'], CONFIG['d_model'], CONFIG['n_layers'], cms_tiers=tiers)
+    model.load_state_dict(state_dict, strict=True)
+    model.to(device)
+    if dtype is not None:
+        model.to(dtype)
+    model.eval()
+    return model, checkpoint if isinstance(checkpoint, dict) else None
+
+
+def maybe_compile_for_steps(model, verbose=True):
+    """torch.compile the T=1 generation-step path when available (~1.15x on MPS).
+
+    Prefill must stay EAGER: inductor cannot lower linalg_solve_triangular on
+    MPS (the chunked scan). The compiled wrapper shares weights with `model`,
+    and the fp32 memory state passes between eager prefill and compiled steps.
+    Any failure falls back to the eager model.
+    """
+    try:
+        compiled = torch.compile(model, dynamic=False)
+        with torch.no_grad():
+            x1 = torch.tensor([[464]], device=next(model.parameters()).device)  # "The"
+            logits, state = compiled(x1, state=None, last_only=True)
+            for _ in range(2):
+                logits, state = compiled(x1, state=state, last_only=True)
+        if verbose:
+            print(f"{Fore.GREEN}torch.compile active for generation steps{Style.RESET_ALL}")
+        return compiled
+    except Exception as e:
+        if verbose:
+            print(f"{Fore.YELLOW}torch.compile unavailable ({type(e).__name__}); using eager steps{Style.RESET_ALL}")
+        return model
+
+
+def sample_next_token(logits, temperature=0.7, top_k=40, top_p=0.9,
+                      repetition_penalty=1.15, prev_tokens=None):
+    """Top-k + nucleus sampling with repetition penalty and MPS-safe clamping.
+
+    logits: [B, V] (any position-sliced logits); returns [B, 1] token ids.
+    prev_tokens: iterable of already-emitted/prompt token ids to penalize.
+    Sampling math runs in fp32 regardless of model dtype.
+    """
+    # clone: .float() on an fp32 tensor aliases the caller's logits and the
+    # in-place repetition penalty below would mutate them across calls
+    logits = logits[:, -1, :].float().clone()
+    if repetition_penalty and repetition_penalty != 1.0 and prev_tokens:
+        ids = torch.as_tensor(sorted(set(prev_tokens)), dtype=torch.long, device=logits.device)
+        scores = logits[:, ids]
+        logits[:, ids] = torch.where(scores > 0, scores / repetition_penalty, scores * repetition_penalty)
+    logits = logits / max(0.01, temperature)
+    if top_k and top_k > 0:
+        v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+        logits = logits.masked_fill(logits < v[:, [-1]], float('-inf'))
+    if top_p and top_p < 1.0:
+        sorted_logits, sorted_idx = torch.sort(logits, descending=True)
+        cumulative = torch.cumsum(torch.softmax(sorted_logits, dim=-1), dim=-1)
+        remove = cumulative > top_p
+        remove[:, 1:] = remove[:, :-1].clone()
+        remove[:, 0] = False
+        logits = logits.scatter(-1, sorted_idx, logits.gather(-1, sorted_idx).masked_fill(remove, float('-inf')))
+    probs = torch.softmax(logits, dim=-1)
+    probs = torch.clamp(probs, min=1e-10)  # MPS multinomial guard (AGENTS.md known issue)
+    probs = probs / probs.sum(dim=-1, keepdim=True)
+    return torch.multinomial(probs, num_samples=1)
 
 
 # ==========================================

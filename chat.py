@@ -5,7 +5,10 @@ import os
 import psutil
 from colorama import Fore, Style, init
 
-from train_hope import HOPE, CONFIG, DEVICE, TOKENIZER, PAD_TOKEN_ID, EOS_TOKEN_ID
+from train_hope import (
+    HOPE, CONFIG, DEVICE, TOKENIZER, PAD_TOKEN_ID, EOS_TOKEN_ID,
+    load_model_for_inference, sample_next_token, maybe_compile_for_steps,
+)
 
 init(autoreset=True)
 
@@ -33,20 +36,15 @@ def print_model_stats(model):
 
 
 def load_model(path):
+    """Loads via the shared strict loader (strict=True inside
+    load_model_for_inference). bf16 by default — pass --fp32 for legacy."""
     print(f"{Fore.YELLOW}Loading model from {path}...{Style.RESET_ALL}")
+    dtype = torch.float32 if "--fp32" in sys.argv else torch.bfloat16
     try:
-        model = HOPE(CONFIG['vocab_size'], CONFIG['d_model'], CONFIG['n_layers'])
-        checkpoint = torch.load(path, map_location=DEVICE)
-
-        if isinstance(checkpoint, dict) and 'model_state' in checkpoint:
+        model, checkpoint = load_model_for_inference(path, device=DEVICE, dtype=dtype)
+        if checkpoint is not None:
             print(f"{Fore.CYAN}Detected Smart Checkpoint (step {checkpoint.get('step', 'unknown')}). Unpacking...{Style.RESET_ALL}")
-            state_dict = checkpoint['model_state']
-        else:
-            state_dict = checkpoint
-
-        model.load_state_dict(state_dict, strict=True)
-        model.to(DEVICE)
-        model.eval()
+        print(f"{Fore.CYAN}Precision: {dtype} | scan/memory state: fp32{Style.RESET_ALL}")
         return model
 
     except FileNotFoundError:
@@ -61,26 +59,28 @@ def load_model(path):
         sys.exit(1)
 
 
-def generate_response(model, prompt, max_new_tokens=250, temperature=0.7, show_reasoning=True):
+def generate_response(model, prompt, max_new_tokens=250, temperature=0.7, show_reasoning=True, step_model=None):
     full_prompt = f"Question: {prompt.strip()}\nAnswer: "
     input_ids = TOKENIZER.encode(full_prompt, return_tensors="pt").to(DEVICE)
+    step_model = step_model or model
 
     print(f"\n{Fore.CYAN}HOPE: {Style.RESET_ALL}", end="", flush=True)
 
     generated_ids = []
+    prev_tokens = input_ids[0].tolist()  # repetition-penalty context
 
     with torch.no_grad():
-        logits, state = model(input_ids)
+        # last_only: CMS stack + head run on the final position only (2.3x prefill)
+        logits, state = model(input_ids, last_only=True)
 
-    last_token_logits = logits[:, -1, :] / max(0.01, temperature)
-    probs = F.softmax(last_token_logits, dim=-1)
-    next_token = torch.multinomial(probs, num_samples=1)
+    next_token = sample_next_token(logits, temperature=temperature, prev_tokens=prev_tokens)
 
     for _ in range(max_new_tokens):
         token_int = next_token.item()
         if token_int == EOS_TOKEN_ID:
             break
         generated_ids.append(token_int)
+        prev_tokens.append(token_int)
 
         text = TOKENIZER.decode(generated_ids, skip_special_tokens=True)
         if not show_reasoning and "Reasoning:" in text:
@@ -93,12 +93,9 @@ def generate_response(model, prompt, max_new_tokens=250, temperature=0.7, show_r
         print(f"\r{Fore.CYAN}HOPE: {Style.RESET_ALL}{text}", end="", flush=True)
 
         with torch.no_grad():
-            x = next_token
-            logits, state = model(x, state=state)
+            logits, state = step_model(next_token, state=state, last_only=True)
 
-        last_token_logits = logits[:, -1, :] / max(0.01, temperature)
-        probs = F.softmax(last_token_logits, dim=-1)
-        next_token = torch.multinomial(probs, num_samples=1)
+        next_token = sample_next_token(logits, temperature=temperature, prev_tokens=prev_tokens)
 
     print()
     return TOKENIZER.decode(generated_ids, skip_special_tokens=True)
@@ -113,6 +110,7 @@ def main():
 
     model = load_model(model_path)
     print_model_stats(model)
+    step_model = maybe_compile_for_steps(model)
 
     print("Interactive Console - Type 'quit' to exit")
     print("Commands: /temp <value>, /tokens <value>, /reasoning <on|off>")
@@ -153,7 +151,7 @@ def main():
                 print(f"Reasoning display: {'on' if show_reasoning else 'off'}")
                 continue
 
-            generate_response(model, user_input, max_new_tokens=max_tokens, temperature=temperature, show_reasoning=show_reasoning)
+            generate_response(model, user_input, max_new_tokens=max_tokens, temperature=temperature, show_reasoning=show_reasoning, step_model=step_model)
 
         except KeyboardInterrupt:
             print("\nExiting...")

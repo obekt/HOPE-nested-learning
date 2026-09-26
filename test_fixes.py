@@ -145,8 +145,19 @@ def test_bug2_running_loss():
 
 
 def test_bug6_strict_loading():
-    """Bug #6: All inference scripts should use strict=True."""
-    print("\n🟡 Bug #6: strict=True in inference scripts")
+    """Bug #6: All inference scripts must load weights strictly.
+
+    Since the inference-speed refactor, scripts either contain strict=True
+    directly or load via train_hope.load_model_for_inference, which is itself
+    strict (verified below)."""
+    print("\n🟡 Bug #6: strict loading in inference scripts")
+
+    # The shared loader must be strict
+    import inspect
+    import train_hope
+    loader_src = inspect.getsource(train_hope.load_model_for_inference)
+    test("shared loader load_model_for_inference uses strict=True",
+         'strict=True' in loader_src and 'strict=False' not in loader_src)
 
     for fname in ['chat.py', 'app.py', 'generate.py', 'test_model.py']:
         filepath = os.path.join(os.path.dirname(__file__), fname)
@@ -158,14 +169,14 @@ def test_bug6_strict_loading():
             content = f.read()
 
         has_strict_false = 'strict=False' in content
-        has_strict_true = 'strict=True' in content
+        has_strict_true = 'strict=True' in content or 'load_model_for_inference' in content
 
         test(f"{fname}: no strict=False",
              not has_strict_false,
              "still contains strict=False")
-        test(f"{fname}: has strict=True",
+        test(f"{fname}: has strict loading",
              has_strict_true,
-             "strict=True not found")
+             "neither strict=True nor load_model_for_inference found")
 
 
 def test_bug11_typo():

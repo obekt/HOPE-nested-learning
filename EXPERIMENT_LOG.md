@@ -71,6 +71,22 @@ Marathon complete: ALL_DONE 09:44 (48k foundation + 6k Phase 2, ~14.2 h wall-clo
 **Per user constraint ("only if it is a wow"): default = do NOT publish experiment docs/model.** Options presented to user: (a) keep everything local (default), (b) publish anyway as an honest negative-result/learning-curve report (EXPERIMENT.md + log + stats + probe harness; model optional via GitHub Releases — gh auth verified as obekt), (c) publish docs only, no model.
 **DECISION (user, 2026-09-26 ~09:50): publish docs + model** — EXPERIMENT.md writeup + this log + probe_stats.jsonl + probe harness + extension drivers committed; `hope_final_best.pth` and `hope_foundation_best.pth` uploaded to GitHub Release `v0.1-marathon`.
 
+### D6 — 2026-09-26 ~10:40 — Inference optimization pass (post-marathon, user-requested)
+Scope: bf16 weights, last_only prefill, compiled T=1 steps, nucleus+repetition-penalty sampler; shared helpers in train_hope.py, all four inference scripts rewired.
+
+**Decisions & measurements:**
+- bf16 default for inference, **scan + memory state always fp32**. Gate: 100% greedy token agreement vs fp32 (5 prompts × 48 tok) and identical probe metrics (top-5 20%, MRR 0.165). Speed: 387→463 tok/s (1.18×; generation is kernel-launch-bound, not purely bandwidth-bound).
+- `last_only=True` prefill (CMS blocks are position-wise): T=512 prefill 12.8→5.1 ms (2.49×), T=12 4.0→2.4 ms (1.64×). Equivalence proven in test_inference.py (final-position logits atol 1e-4, incl. carried state).
+- `torch.compile(dynamic=False)` on T=1 steps only: +1.15× (427→489 tok/s). Prefill MUST stay eager — inductor cannot lower linalg_solve_triangular on MPS. Combined generation ≈ 500 tok/s (1.29× vs fp32-eager baseline).
+- Sampler: temperature + top-k 40 + top-p 0.9 + repetition penalty 1.15 + MPS multinomial clamp. Fixes observed repetition degeneration.
+
+**Bugs found by the new tests/validation (all fixed):**
+1. Padding mask created `.float()` promoted the fp32 memory state against bf16 params → scan now casts everything to fp32 explicitly.
+2. `_tri_solve_ok(device, x.dtype)` probed with bf16 → Metal assert ABORTS the process (uncatchable). Probe pinned to fp32 (scan is fp32 by construction).
+3. `sample_next_token` aliased caller logits when already fp32 (`.float()` no-copy) — repetition penalty mutated the caller's tensor across calls. Fixed with explicit clone; regression test added.
+
+**Greedy-decoding finding (published as EXPERIMENT.md addendum):** `hope_final_best` answers "Why is the sky blue?" CORRECTLY under greedy (Rayleigh scattering + reasoning), with/without trailing space. Prompt-format fragile (top-1 p≈9% in the flat regime); does not generalize to other questions (memorized dataset item). Criterion 3 stays FAIL; characterization refined to "retrieves one canonical answer greedily; format-sensitive; no cross-question generalization". Practical: use temp ≤0.3 with this checkpoint.
+
 ### Runbook for extension (exact mechanics)
 ```bash
 # 1) Phase 1 extension (auto-resumes from step in hope_foundation.pth)
