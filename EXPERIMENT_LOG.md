@@ -207,3 +207,30 @@ EOF
 ### Speed (verified)
 - ~16.4k tok/s steady (~1.0 s/step, 16,384 tok/step) — 5.2x pre-optimization baseline (~3.2k tok/s).
 - Validation: ~2.5 s per run from 50-batch startup cache (was: minutes, re-streaming 100k samples).
+
+### CPU vs GPU inference throughput (2026-09-26, extends D6)
+Protocol: `hope_final.pth` (86M), M4 Max (14 cores, torch 2.8, 10 CPU threads), eager on both devices (no `torch.compile`), greedy decode with state passing, no EOS early-stop; tok/s is AGGREGATE over the batch; warmup + best-of-3 for prefills. CPU ran fp32 (bf16 CPU decode measured identical at B=1: 380.2 vs 380.0 tok/s — PyTorch aarch64 bf16 matmul gives no speedup, so CPU-only should just use fp32); MPS ran bf16 as in D6.
+
+Single stream (B=1, short prompt): CPU fp32 decode **380 tok/s** vs MPS bf16 **483 tok/s** — only 1.27x. T=1 decode is kernel-launch/overhead-bound at this model size, so the GPU's parallelism barely registers.
+
+Batched decode (tok/s aggregate):
+
+| Batch | CPU fp32 | MPS bf16 | GPU speedup |
+|---|---|---|---|
+| 1 | 385 | 491 | 1.27x |
+| 4 | 581 | 1,403 | 2.41x |
+| 16 | 1,863 | 4,145 | 2.22x |
+| 32 | 2,839 | 6,269 | 2.21x |
+
+Prefill T=512 (`last_only=True`):
+
+| Batch | CPU fp32 | MPS bf16 | GPU speedup |
+|---|---|---|---|
+| 1 | **6.5 ms** | 7.8 ms | 0.84x (CPU wins) |
+| 8 | 24.8 ms | 14.0 ms | 1.77x |
+
+Findings:
+- **GPU advantage plateaus at ~2.2x** (B>=4), far below typical transformer gaps: T=1 decode is weight-bandwidth-bound and M4 Max unified memory feeds 10 CPU cores nearly as well as the GPU — even at fp32 (2x the bytes) vs bf16.
+- **Both devices scale sub-linearly but strongly with batch**: CPU 7.4x throughput at 32x batch, GPU 12.8x. Per-stream at B=32: 89 tok/s (CPU) vs 196 tok/s (GPU).
+- **T=512 B=1 prefill is faster on CPU**: with `last_only`, prefill reduces to the fast-memory chunked scan (light compute) + one position through CMS/head — too little work to amortize MPS launch overhead. GPU only pulls ahead at B>=8.
+- Practical upshot: single-user CPU-only inference is viable for this model (~380 tok/s); MPS matters mainly for concurrent/batched serving.
