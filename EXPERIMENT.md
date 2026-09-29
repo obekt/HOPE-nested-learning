@@ -189,8 +189,14 @@ repetition penalty (fixes the repetition degeneration seen in §3 finding 5's er
 
 ```bash
 gh release download v0.1-marathon --repo obekt/HOPE-nested-learning --pattern "*.pth"
-python3 chat.py   # loads CONFIG['save_path']; point it at the downloaded file
+python3 chat.py --model hope_final_best.pth       # Q&A chat (prompt wrapper auto-applied)
+python3 chat.py --model hope_foundation_best.pth  # Wikipedia-style raw completions
 ```
+
+Prompt format is auto-detected per checkpoint (`Question:/Answer:` wrapper for
+the Q&A model, raw text for the foundation model — the wrapper makes the
+foundation model degenerate to whitespace), and chat streams incrementally,
+stopping at end-of-article back-matter in raw mode.
 
 **Code & data (this repo):**
 - `probe_model.py` — the probe harness (`--report` prints the accumulated table)

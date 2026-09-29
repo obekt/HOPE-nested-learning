@@ -60,6 +60,16 @@ def load_model(path):
         sys.exit(1)
 
 
+# Wikipedia-style back-matter: everything after these markers is References /
+# category-stub filler, so raw-mode (foundation) generation stops there.
+END_OF_ARTICLE_MARKERS = (
+    "\n\nReferences", "\n\nExternal links", "\n\nSee also",
+    "\n\nFurther reading", "\n\nBibliography", "\n\nSources",
+    "\n\nNotes",
+)
+_STREAM_HOLDBACK = 24  # chars withheld so a half-typed marker is never printed
+
+
 def generate_response(model, prompt, max_new_tokens=250, temperature=0.7, show_reasoning=True, step_model=None, qa_format=True):
     full_prompt = wrap_prompt(prompt, qa_format)
     input_ids = TOKENIZER.encode(full_prompt, return_tensors="pt").to(DEVICE)
@@ -69,6 +79,8 @@ def generate_response(model, prompt, max_new_tokens=250, temperature=0.7, show_r
 
     generated_ids = []
     prev_tokens = input_ids[0].tolist()  # repetition-penalty context
+    shown_upto = 0   # incremental streaming: chars already on screen
+    final_text = ""
 
     with torch.no_grad():
         # last_only: CMS stack + head run on the final position only (2.3x prefill)
@@ -76,6 +88,7 @@ def generate_response(model, prompt, max_new_tokens=250, temperature=0.7, show_r
 
     next_token = sample_next_token(logits, temperature=temperature, prev_tokens=prev_tokens)
 
+    stop = False
     for _ in range(max_new_tokens):
         token_int = next_token.item()
         if token_int == EOS_TOKEN_ID:
@@ -84,26 +97,55 @@ def generate_response(model, prompt, max_new_tokens=250, temperature=0.7, show_r
         prev_tokens.append(token_int)
 
         text = TOKENIZER.decode(generated_ids, skip_special_tokens=True)
-        if not show_reasoning and "Reasoning:" in text:
-            parts = text.split("Reasoning:")
-            if len(parts) > 1:
-                text = parts[0].strip()
-                break
 
-        # Stream by re-printing the full decoded text (simple approach)
-        print(f"\r{Fore.CYAN}HOPE: {Style.RESET_ALL}{text}", end="", flush=True)
+        if not show_reasoning and "Reasoning:" in text:
+            text = text.split("Reasoning:")[0].strip()
+            stop = True
+        elif not qa_format:
+            # foundation model: cut before the end-of-article back-matter
+            cut = -1
+            for marker in END_OF_ARTICLE_MARKERS:
+                i = text.find(marker)
+                if i != -1 and (cut == -1 or i < cut):
+                    cut = i
+            if cut != -1:
+                text = text[:cut].rstrip()
+                stop = True
+
+        final_text = text
+        # Print only what's NEW since the last token. The old approach
+        # re-printed the full text with \r every token — once a line wrapped,
+        # \r couldn't overwrite it and the terminal flooded with copies.
+        safe = len(text) if stop else max(0, len(text) - _STREAM_HOLDBACK)
+        if safe > shown_upto:
+            print(text[shown_upto:safe], end="", flush=True)
+            shown_upto = safe
+
+        if stop:
+            break
 
         with torch.no_grad():
             logits, state = step_model(next_token, state=state, last_only=True)
 
         next_token = sample_next_token(logits, temperature=temperature, prev_tokens=prev_tokens)
 
+    # flush the held-back tail
+    if len(final_text) > shown_upto:
+        print(final_text[shown_upto:], end="", flush=True)
     print()
-    return TOKENIZER.decode(generated_ids, skip_special_tokens=True)
+    return final_text
 
 
 def main():
+    # --model <path> overrides CONFIG['save_path'] (argv-style like --fp32)
     model_path = CONFIG['save_path']
+    if "--model" in sys.argv:
+        i = sys.argv.index("--model")
+        if i + 1 < len(sys.argv):
+            model_path = sys.argv[i + 1]
+        else:
+            print(f"{Fore.RED}--model requires a path{Style.RESET_ALL}")
+            sys.exit(1)
     best_path = model_path.replace('.pth', '_best.pth')
     if os.path.exists(best_path) and not os.path.exists(model_path):
         model_path = best_path
@@ -168,9 +210,13 @@ def main():
                 print(f"Prompt format: {'Q&A wrapper' if qa_format else 'raw'}")
                 continue
 
-            generate_response(model, user_input, max_new_tokens=max_tokens, temperature=temperature, show_reasoning=show_reasoning, step_model=step_model, qa_format=qa_format)
+            try:
+                generate_response(model, user_input, max_new_tokens=max_tokens, temperature=temperature, show_reasoning=show_reasoning, step_model=step_model, qa_format=qa_format)
+            except KeyboardInterrupt:
+                # Ctrl+C stops this response but keeps the chat alive
+                print(f"\n{Fore.YELLOW}(generation stopped){Style.RESET_ALL}")
 
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, EOFError):
             print("\nExiting...")
             break
 

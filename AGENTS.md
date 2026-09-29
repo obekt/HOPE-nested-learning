@@ -20,7 +20,7 @@ Core idea: Intelligence is a nested optimization problem, not just deep layers. 
 |------|---------|
 | `train_hope.py` | **Core file.** Model architecture, dataset loader, training loop, dashboard. All other scripts import from here. |
 | `run_pipeline.py` | Automated full pipeline: Wikipedia foundation → Q&A fine-tuning. Runs both phases back-to-back. |
-| `chat.py` | Interactive console chat with the model. Supports `/temp`, `/tokens`, `/reasoning` commands. |
+| `chat.py` | Interactive console chat with the model. Supports `/temp`, `/tokens`, `/reasoning`, `/format raw|qa` commands and `--model <path>` (defaults to `CONFIG['save_path']`). Streams incrementally; raw mode stops at end-of-article back-matter. |
 | `app.py` | Gradio web UI for chatting with the model. |
 | `generate.py` | CLI one-shot text generation. |
 | `test_model.py` | Quick evaluation on 5 hardcoded test questions. |
@@ -206,6 +206,7 @@ python generate.py --prompt "Why is the sky blue?" --temperature 0.7
 | ~~Training froze for minutes every 60 s~~ | `run_validation` re-iterated the val IterableDataset, re-streaming 100k skipped HF samples per call | **FIXED**: 50 val batches cached once at startup. |
 | NaN/−inf risk in chunked scan | log(α) with underflowed α | **FIXED**: `F.logsigmoid` on the gate pre-activation; all decay factors are exp of non-positive pairwise differences. |
 | ~~Chat/generate output is pure whitespace~~ | Scripts hardcoded the `Question:/Answer:` wrapper, which is out-of-distribution for the foundation (packed-Wikipedia) model — sampling collapses to spaces | **FIXED**: checkpoints store `qa_format`; `uses_qa_format()` auto-detects (filename fallback for old checkpoints); chat/generate/app/test_model all use `wrap_prompt()`. Overrides: `generate.py --raw/--qa`, `chat.py /format raw|qa`. |
+| ~~chat.py floods the terminal with repeated text~~ | Streaming re-printed the FULL decoded response on every token with `\r`; once a line wrapped, `\r` couldn't overwrite and each token left another copy on screen | **FIXED**: incremental streaming prints only new characters (24-char holdback so partial stop markers never flash). Raw mode also stops at end-of-article markers (`References`, `External links`, …) instead of rambling through category stubs, and Ctrl+C stops just the current response. |
 
 ---
 
