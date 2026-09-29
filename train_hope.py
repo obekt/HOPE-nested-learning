@@ -389,6 +389,34 @@ def load_model_for_inference(path=None, device=DEVICE, dtype=torch.bfloat16):
     return model, checkpoint if isinstance(checkpoint, dict) else None
 
 
+def uses_qa_format(path=None, checkpoint=None):
+    """Whether prompts for this checkpoint need the Question:/Answer: wrapper.
+
+    Checkpoints saved since the prompt-format fix carry an explicit
+    'qa_format' flag (from CONFIG['isolate_samples'] at training time).
+    Older checkpoints have no flag, so fall back to a filename heuristic:
+    '*final*'/'*qa*'/'*finetune*' are Q&A fine-tunes (wrap);
+    '*foundation*'/'*base*'/'*wiki*' are packed-Wikipedia models (raw —
+    the wrapper is out-of-distribution for them and generation degenerates
+    to whitespace). Unknown names keep the legacy behavior (wrap).
+    """
+    if isinstance(checkpoint, dict) and 'qa_format' in checkpoint:
+        return bool(checkpoint['qa_format'])
+    name = os.path.basename(path or CONFIG['save_path']).lower()
+    if 'final' in name or 'qa' in name or 'finetune' in name:
+        return True
+    if 'foundation' in name or 'base' in name or 'wiki' in name:
+        return False
+    return True
+
+
+def wrap_prompt(text, qa_format):
+    """Apply the Q&A template the fine-tuned model was trained on, or pass
+    the prompt through verbatim for foundation (packed-Wikipedia) models."""
+    text = text.strip()
+    return f"Question: {text}\nAnswer: " if qa_format else text
+
+
 def maybe_compile_for_steps(model, verbose=True):
     """torch.compile the T=1 generation-step path when available (~1.15x on MPS).
 
@@ -710,6 +738,10 @@ def make_checkpoint(model, optimizers, schedulers, tier_counters, step, best_val
         'scheduler_states': [sch.state_dict() for sch in schedulers],
         'tier_counters': list(tier_counters),
         'cms_tiers': CONFIG.get('cms_tiers'),
+        # Prompt format the model was trained with: Q&A phase uses
+        # isolate_samples=True and the "Question:/Answer:" template; the
+        # foundation phase is packed Wikipedia (raw prompts only).
+        'qa_format': bool(CONFIG.get('isolate_samples', False)),
     }
 
 

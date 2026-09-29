@@ -6,6 +6,7 @@ import sys
 from train_hope import (
     HOPE, CONFIG, DEVICE, TOKENIZER, EOS_TOKEN_ID,
     load_model_for_inference, sample_next_token, maybe_compile_for_steps,
+    uses_qa_format, wrap_prompt,
 )
 
 MODEL_FILENAME = CONFIG['save_path']
@@ -34,14 +35,17 @@ except RuntimeError as e:
     sys.exit(1)
 
 step_model = maybe_compile_for_steps(model)
-print(f"Model loaded successfully! ({load_path})")
+# Prompt format auto-detected from the checkpoint (foundation models
+# degenerate to whitespace under the Q&A wrapper; fine-tuned models need it).
+QA_FORMAT = uses_qa_format(load_path, checkpoint)
+print(f"Model loaded successfully! ({load_path}) | prompt format: {'Q&A wrapper' if QA_FORMAT else 'raw'}")
 
 
 def predict(message, history, temperature, max_tokens, show_reasoning):
     if not message.strip():
         return
 
-    full_prompt = f"Question: {message.strip()}\nAnswer: "
+    full_prompt = wrap_prompt(message, QA_FORMAT)
     input_ids = TOKENIZER.encode(full_prompt, return_tensors="pt").to(DEVICE)
     generated_ids = []
     prev_tokens = input_ids[0].tolist()

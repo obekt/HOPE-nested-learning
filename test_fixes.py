@@ -297,6 +297,63 @@ def test_pipeline_file_integrity():
          'hope_final.pth' in content)
 
 
+def test_prompt_format_autodetect():
+    """Regression: chat/generate/app/test_model wrapped EVERY prompt in the
+    Question:/Answer: template, but the foundation model (packed Wikipedia)
+    was never trained on it and degenerates to whitespace under the wrapper.
+    Fix: checkpoints carry 'qa_format'; uses_qa_format() falls back to a
+    filename heuristic for older checkpoints; wrap_prompt() applies it."""
+    print("\n🔴 Prompt-format auto-detection (whitespace bug)")
+    from train_hope import uses_qa_format, wrap_prompt, make_checkpoint
+
+    # Explicit checkpoint metadata wins over everything
+    test("Checkpoint qa_format=True -> wrap",
+         uses_qa_format("anything.pth", {"qa_format": True}) is True)
+    test("Checkpoint qa_format=False -> raw",
+         uses_qa_format("hope_final.pth", {"qa_format": False}) is False)
+
+    # Legacy checkpoints (no flag): filename heuristic
+    test("Legacy 'hope_foundation.pth' -> raw",
+         uses_qa_format("hope_foundation.pth") is False)
+    test("Legacy 'hope_foundation_best.pth' -> raw",
+         uses_qa_format("hope_foundation_best.pth") is False)
+    test("Legacy 'hope_final.pth' -> wrap",
+         uses_qa_format("hope_final.pth") is True)
+    test("Legacy 'hope_final_best.pth' -> wrap",
+         uses_qa_format("hope_final_best.pth") is True)
+    test("Unknown filename keeps legacy behavior (wrap)",
+         uses_qa_format("some_model.pth") is True)
+
+    # wrap_prompt behavior
+    test("wrap_prompt raw passes through (stripped)",
+         wrap_prompt("  Nikola Tesla was  ", False) == "Nikola Tesla was")
+    test("wrap_prompt qa applies the template",
+         wrap_prompt("Why is the sky blue?", True) == "Question: Why is the sky blue?\nAnswer: ")
+
+    # make_checkpoint records the flag from CONFIG['isolate_samples']
+    saved = CONFIG['isolate_samples']
+    try:
+        CONFIG['isolate_samples'] = True
+        model = HOPE(64, 16, 2, cms_tiers=[[2, 1]])
+        ck = make_checkpoint(model, [], [], [], 0, 0.0)
+        test("make_checkpoint stores qa_format=True when isolate_samples",
+             ck.get('qa_format') is True)
+        CONFIG['isolate_samples'] = False
+        ck = make_checkpoint(model, [], [], [], 0, 0.0)
+        test("make_checkpoint stores qa_format=False for foundation",
+             ck.get('qa_format') is False)
+    finally:
+        CONFIG['isolate_samples'] = saved
+
+    # All four inference scripts must import and use the shared helpers
+    for script in ("chat.py", "generate.py", "app.py", "test_model.py"):
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), script)) as f:
+            src = f.read()
+        test(f"{script} uses uses_qa_format/wrap_prompt (no hardcoded wrapper)",
+             "uses_qa_format" in src and "wrap_prompt" in src
+             and 'f"Question: {' not in src)
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("HOPE Project — Bug Fix Verification Tests")
@@ -310,6 +367,7 @@ if __name__ == "__main__":
     test_bug7_lr_schedule()
     test_model_basic_sanity()
     test_pipeline_file_integrity()
+    test_prompt_format_autodetect()
 
     print("\n" + "=" * 60)
     total = PASS + FAIL

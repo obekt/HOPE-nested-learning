@@ -86,6 +86,7 @@ Logits
    - `HOPE.forward(..., last_only=True)` — runs CMS stack + head on the final position only. Valid because CMS blocks are position-wise; only the fast memory mixes time. **2.5× faster prefill** at T=512.
    - `maybe_compile_for_steps(model)` — `torch.compile(dynamic=False)` for the T=1 generation steps (~1.15× on MPS; generation is kernel-launch-bound). **Prefill must stay eager**: inductor cannot lower `linalg_solve_triangular` on MPS. Falls back to eager automatically.
    - `sample_next_token(...)` — temperature + top-k(40) + top-p(0.9) + repetition penalty(1.15) with the MPS `multinomial` NaN guard (clamp + renormalize). Clones logits (never mutates caller tensors).
+   - `uses_qa_format(path, checkpoint)` + `wrap_prompt(text, qa_format)` — prompt-format auto-detection. Checkpoints store `qa_format` (from `isolate_samples` at training time); old checkpoints fall back to a filename heuristic (`*final*`/`*qa*` → wrap, `*foundation*`/`*base*` → raw). All four inference scripts (chat/generate/app/test_model) use it: the foundation model degenerates to whitespace under the `Question:/Answer:` wrapper, and the fine-tuned model needs it. `generate.py` has `--raw`/`--qa` overrides; `chat.py` has a `/format raw|qa` toggle.
    - Measured (86M model, MPS): prefill T=512 12.8→5.1 ms, generation 387→~500 tok/s.
 
 ---
@@ -204,6 +205,7 @@ python generate.py --prompt "Why is the sky blue?" --temperature 0.7
 | Output is gibberish | Model trained without foundation (Q&A only) | Must run full pipeline: Wikipedia first, then Q&A. |
 | ~~Training froze for minutes every 60 s~~ | `run_validation` re-iterated the val IterableDataset, re-streaming 100k skipped HF samples per call | **FIXED**: 50 val batches cached once at startup. |
 | NaN/−inf risk in chunked scan | log(α) with underflowed α | **FIXED**: `F.logsigmoid` on the gate pre-activation; all decay factors are exp of non-positive pairwise differences. |
+| ~~Chat/generate output is pure whitespace~~ | Scripts hardcoded the `Question:/Answer:` wrapper, which is out-of-distribution for the foundation (packed-Wikipedia) model — sampling collapses to spaces | **FIXED**: checkpoints store `qa_format`; `uses_qa_format()` auto-detects (filename fallback for old checkpoints); chat/generate/app/test_model all use `wrap_prompt()`. Overrides: `generate.py --raw/--qa`, `chat.py /format raw|qa`. |
 
 ---
 

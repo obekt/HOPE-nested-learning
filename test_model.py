@@ -9,17 +9,18 @@ import sys
 from train_hope import (
     HOPE, CONFIG, DEVICE, TOKENIZER, EOS_TOKEN_ID,
     load_model_for_inference, sample_next_token,
+    uses_qa_format, wrap_prompt,
 )
 
 
 def load_model(path):
     """Shared strict loader (strict=True inside load_model_for_inference), bf16."""
-    model, _ = load_model_for_inference(path, device=DEVICE, dtype=torch.bfloat16)
-    return model
+    model, checkpoint = load_model_for_inference(path, device=DEVICE, dtype=torch.bfloat16)
+    return model, checkpoint
 
 
-def generate(model, prompt, max_new_tokens=200, temperature=0.7):
-    full_prompt = f"Question: {prompt.strip()}\nAnswer: "
+def generate(model, prompt, max_new_tokens=200, temperature=0.7, qa_format=True):
+    full_prompt = wrap_prompt(prompt, qa_format)
     input_ids = TOKENIZER.encode(full_prompt, return_tensors="pt").to(DEVICE)
 
     generated = []
@@ -65,15 +66,17 @@ def main():
         print("Train first with: python train_hope.py")
         sys.exit(1)
 
-    model = load_model(model_path)
+    model, checkpoint = load_model(model_path)
+    qa_format = uses_qa_format(model_path, checkpoint)
     total_params = sum(p.numel() for p in model.parameters())
-    print(f"Loaded model: {total_params/1e6:.1f}M parameters from {model_path}\n")
+    print(f"Loaded model: {total_params/1e6:.1f}M parameters from {model_path}")
+    print(f"Prompt format: {'Q&A wrapper' if qa_format else 'raw'}\n")
     print("=" * 60)
 
     for question in TEST_QUESTIONS:
         print(f"\nQ: {question}")
         print("-" * 40)
-        answer = generate(model, question, max_new_tokens=200, temperature=0.7)
+        answer = generate(model, question, max_new_tokens=200, temperature=0.7, qa_format=qa_format)
         print(f"A: {answer}")
         print("=" * 60)
 

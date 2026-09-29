@@ -8,6 +8,7 @@ from colorama import Fore, Style, init
 from train_hope import (
     HOPE, CONFIG, DEVICE, TOKENIZER, PAD_TOKEN_ID, EOS_TOKEN_ID,
     load_model_for_inference, sample_next_token, maybe_compile_for_steps,
+    uses_qa_format, wrap_prompt,
 )
 
 init(autoreset=True)
@@ -45,7 +46,7 @@ def load_model(path):
         if checkpoint is not None:
             print(f"{Fore.CYAN}Detected Smart Checkpoint (step {checkpoint.get('step', 'unknown')}). Unpacking...{Style.RESET_ALL}")
         print(f"{Fore.CYAN}Precision: {dtype} | scan/memory state: fp32{Style.RESET_ALL}")
-        return model
+        return model, checkpoint
 
     except FileNotFoundError:
         print(f"{Fore.RED}Error: Model file '{path}' not found.{Style.RESET_ALL}")
@@ -59,8 +60,8 @@ def load_model(path):
         sys.exit(1)
 
 
-def generate_response(model, prompt, max_new_tokens=250, temperature=0.7, show_reasoning=True, step_model=None):
-    full_prompt = f"Question: {prompt.strip()}\nAnswer: "
+def generate_response(model, prompt, max_new_tokens=250, temperature=0.7, show_reasoning=True, step_model=None, qa_format=True):
+    full_prompt = wrap_prompt(prompt, qa_format)
     input_ids = TOKENIZER.encode(full_prompt, return_tensors="pt").to(DEVICE)
     step_model = step_model or model
 
@@ -108,12 +109,19 @@ def main():
         model_path = best_path
         print(f"{Fore.CYAN}Using best checkpoint: {best_path}{Style.RESET_ALL}")
 
-    model = load_model(model_path)
+    model, checkpoint = load_model(model_path)
     print_model_stats(model)
     step_model = maybe_compile_for_steps(model)
 
+    # Prompt format: auto-detect from the checkpoint's training-time flag
+    # (or filename for older checkpoints). Foundation models degenerate to
+    # whitespace under the Q&A wrapper; fine-tuned models need it.
+    qa_format = uses_qa_format(model_path, checkpoint)
+    print(f"{Fore.CYAN}Prompt format: {'Q&A wrapper' if qa_format else 'raw'} "
+          f"(toggle with /format raw|qa){Style.RESET_ALL}")
+
     print("Interactive Console - Type 'quit' to exit")
-    print("Commands: /temp <value>, /tokens <value>, /reasoning <on|off>")
+    print("Commands: /temp <value>, /tokens <value>, /reasoning <on|off>, /format <raw|qa>")
     print("-" * 50)
 
     temperature = 0.7
@@ -151,7 +159,16 @@ def main():
                 print(f"Reasoning display: {'on' if show_reasoning else 'off'}")
                 continue
 
-            generate_response(model, user_input, max_new_tokens=max_tokens, temperature=temperature, show_reasoning=show_reasoning, step_model=step_model)
+            if user_input.startswith("/format "):
+                val = user_input.split()[1].lower()
+                if val not in ("raw", "qa"):
+                    print("Usage: /format raw  (verbatim prompt) or /format qa  (Question:/Answer: wrapper)")
+                    continue
+                qa_format = (val == "qa")
+                print(f"Prompt format: {'Q&A wrapper' if qa_format else 'raw'}")
+                continue
+
+            generate_response(model, user_input, max_new_tokens=max_tokens, temperature=temperature, show_reasoning=show_reasoning, step_model=step_model, qa_format=qa_format)
 
         except KeyboardInterrupt:
             print("\nExiting...")
