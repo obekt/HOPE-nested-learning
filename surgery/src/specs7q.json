@@ -1,0 +1,48 @@
+[
+ {
+  "name": "L1.mix.5surp_n600",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 600,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "L2.mix.5surp_t0.8",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal",
+     "ttemp": 0.8
+    }
+   }
+  ]
+ },
+ {
+  "name": "L3.mix.65surp",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.65,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ }
+]

@@ -1,0 +1,153 @@
+[
+ {
+  "name": "F0.final+dst",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001
+    }
+   }
+  ]
+ },
+ {
+  "name": "F1.final+dst_mix.5",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5
+    }
+   }
+  ]
+ },
+ {
+  "name": "F2.final+dst_mix.5surp",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "F3.final+dst_qa50surp",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "wmode": "surprisal",
+     "qa_frac": 0.5
+    }
+   }
+  ]
+ },
+ {
+  "name": "F4.final+dst_mix.5surp_qa35",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal",
+     "qa_frac": 0.35
+    }
+   }
+  ]
+ },
+ {
+  "name": "F5.final+dst_mix.7surp_qa35",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.7,
+     "wmode": "surprisal",
+     "qa_frac": 0.35
+    }
+   }
+  ]
+ },
+ {
+  "name": "F6.final+dst_surp",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "F7.final+dst_mix.3surp_qa50",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.3,
+     "wmode": "surprisal",
+     "qa_frac": 0.5
+    }
+   }
+  ]
+ },
+ {
+  "name": "F8.final+cms8off+mix.5surp_qa35",
+  "steps": [
+   {
+    "op": "scale_cms_mlp",
+    "params": {
+     "layers": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+     ],
+     "factor": 0.0
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal",
+     "qa_frac": 0.35
+    }
+   }
+  ]
+ }
+]

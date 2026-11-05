@@ -181,6 +181,31 @@ fp32 state accumulates more accurately. Sampling upgraded to top-k + nucleus +
 repetition penalty (fixes the repetition degeneration seen in §3 finding 5's era:
 *"the character of the character…"*).
 
+
+### Addendum (2026-11-05): training-free weight surgery on the released checkpoints
+Follow-up work, documented in `surgery/README.md` and logged as D7: the two released
+binaries were edited **directly** — no gradient step, no optimizer — by re-solving
+only the output layer. The trick is that `softmax(log p) = p`, so fitting the head by
+least squares onto GPT-2's log-probabilities (identical 50,257-token vocabulary) has
+the teacher's distribution as its perfect solution; one 513×513 normal equation, and
+2 of the checkpoint's 113 tensors change.
+
+| checkpoint | held-out wiki ppl | confirmation split | factual ranking / context retrieval |
+|---|---|---|---|
+| `hope_foundation_best` | 421 → **216** | 367 → **187** | cloze@5 0.079 held; copy 0.113 → 0.100 |
+| `hope_final_best` | 2 552 → **548** | 2 297 → **500** | cloze@1/@5/MRR unchanged (0.079/0.105/0.087) |
+
+A temperature control (pure logit rescale, s ∈ 0.5…2) confirms the gain is not a
+decoding artifact, and the picks were frozen on one eval split and confirmed on a
+disjoint one. What did **not** happen: no capability was added. On 25 freshly written
+facts both releases score 0.000 top-5 (surgery moves that to 0.040; GPT-2-small, which
+shares the vocabulary, scores 0.280), and the reason is measurable — ridge-probing the
+head's own input `h` recovers the current token at R² 0.46 and the **context** bag of
+past tokens at only **R² 0.066**, i.e. the 16 position-wise CMS blocks leave the fast
+memory's integrated context almost unreachable by a linear readout. That is the single
+most actionable architectural finding from this study (see D7): interleave the fast
+memory into the stack, or give `fast_out` a direct path to the head.
+
 ## 5. Artifacts & reproduction
 
 **Model checkpoints** (GitHub Release `v0.1-marathon`, ~986 MB each):
@@ -201,8 +226,11 @@ stopping at end-of-article back-matter in raw mode.
 **Code & data (this repo):**
 - `probe_model.py` — the probe harness (`--report` prints the accumulated table)
 - `probe_stats.jsonl` — all 34 probe records (ranks, probabilities, samples)
-- `EXPERIMENT_LOG.md` — the decision log (D1–D5) with every trigger and number
+- `EXPERIMENT_LOG.md` — the decision log (D1–D7) with every trigger and number
 - `extend_training.py` / `extend_phase2.py` — the extension drivers (resume + re-seed mechanics)
+- `surgery/` — the 2026-11-05 weight-surgery study: frozen eval spec, 105 measured
+  configurations (`surgery/out/*.jsonl`), and the two edited checkpoints' provenance
+  (`surgery/README.md`; numbers in `EXPERIMENT_LOG.md` D7)
 
 **Reproduce the run:** `python3 run_pipeline.py` (12k+3k default, ~4.5 h at
 16.4k tok/s), then optionally `python3 extend_training.py` + `python3

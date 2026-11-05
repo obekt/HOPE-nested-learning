@@ -1,0 +1,17 @@
+[
+ {
+  "name": "SHIP.final",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ }
+]

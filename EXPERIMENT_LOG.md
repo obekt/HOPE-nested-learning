@@ -87,6 +87,44 @@ Scope: bf16 weights, last_only prefill, compiled T=1 steps, nucleus+repetition-p
 
 **Greedy-decoding finding (published as EXPERIMENT.md addendum):** `hope_final_best` answers "Why is the sky blue?" CORRECTLY under greedy (Rayleigh scattering + reasoning), with/without trailing space. Prompt-format fragile (top-1 p≈9% in the flat regime); does not generalize to other questions (memorized dataset item). Criterion 3 stays FAIL; characterization refined to "retrieves one canonical answer greedily; format-sensitive; no cross-question generalization". Practical: use temp ≤0.3 with this checkpoint.
 
+### D7 — 2026-11-05 — Training-free weight surgery on the released binaries (user-requested)
+Goal: make the released `.pth` files better by editing their weights **directly** — no gradient step, no optimizer, no epochs. Everything lives in `surgery/` (code, frozen eval spec, 105 measured configurations, full writeup in `surgery/README.md`); the edited checkpoints are local artifacts (`.pth` is gitignored).
+
+**Weight audit — what the release actually is** (`surgery/src/diag.py`, `normcheck.py`):
+- `head.weight` rms = **18.8×** its Xavier init, every one of the 50,257 rows grown ≥4.6× → the only well-trained matrix in the model.
+- **61% of `embedding.weight` rows are within 10% of their init norm**; for the low-frequency half, per-element std 0.01998 vs 0.02000 at init and 4th-moment/Gaussian ratio 3.06 → untouched random noise.
+- **Half the depth never trained**: CMS blocks 8–15 sit at **0.97–1.00× their random init** (tier-1/tier-2, periods 4 and 16) vs 1.09–1.19× for blocks 0–7.
+- Fast memory: `proj_q/k/v/out` at 0.98–1.13× init, while the *gates* moved hugely (`gate_alpha` 7.0×, `gate_beta` 4.0×) → the read/write maps stayed random, only write strength/retention were learned.
+- corr(‖head row‖, head bias) = **−0.967** (rare tokens get 2.4× longer output rows); cos(embedding row, head row) = 0.014 (no tying).
+- A closed-form ridge map from **GPT-2's same-id token embedding explains 63%** of the held-out centred variance of HOPE's head rows (12% for its embedding rows) → HOPE's output space is semantically organised and *transferable*.
+
+**The enabling identity:** `softmax(log p) = p` exactly, so least-squares fitting the output layer onto a teacher's **log-probabilities** has, as its perfect solution, the teacher's distribution — no temperature fudge. GPT-2 shares HOPE's vocabulary 1:1 (50,257 ids), so targets align with no alignment step. The whole operation is one normal equation `W = (XᵀX + λI)⁻¹ XᵀY` over HOPE's own hidden states — a 513×513 solve, 15–90 s on this Mac.
+
+**Shipped edits** (each changes **2 of 113 tensors**, 448 MB, same checkpoint schema, `strict=True` loadable, provenance + metrics embedded in a `surgery` block):
+
+| checkpoint | ppl wt2-test | ppl wt2-val (confirmation split) | cloze-A @1/@5 | context-copy | repo probe top-5 |
+|---|---|---|---|---|---|
+| `hope_foundation_best` → `hope_foundation_surg1` | 421 → **216** | 367 → **187** | 0.026/0.079 → 0.026/0.079 | 0.113 → 0.100 | 15% → 15% (MRR 0.113 → 0.105) |
+| `hope_final_best` → `hope_final_surg1` | 2 552 → **548** | 2 297 → **500** | 0.079/0.105 → 0.079/0.105 | 0.007 → 0.010 | 20% → 20% (MRR 0.165 → 0.162) |
+
+Target = 40% GPT-2 + 60% own distribution (foundation build; 50/50 on the Q&A build), positions weighted by teacher surprisal, ridge 1e-3, fitted on 300×512-token windows of wikitext-2 **train** only. Closes 33% (foundation) / 39% (Q&A) of the cross-entropy gap to GPT-2-small run through the identical suite. More aggressive variant (`hope_final_surg_alt.pth`: task-vector λ=0.25 back toward the foundation, then re-solve): ppl 366, context-copy 0.007 → 0.037, but cloze@1 0.079 → 0.053 and 113/113 tensors moved — not shipped as default.
+
+**Discipline:** two-split suite pre-registered in `surgery/src/eval_spec.json` before any edit (suite A = 38-fact cloze + wikitext-2 test + ARC/Wino/TruthfulQA/HellaSwag + copy-with-control; suite B = 25 different facts + wikitext-2 validation + MMLU + a disjoint HellaSwag sample) and every selection was confirmed on B. Temperature control: pure logit rescale s ∈ {0.5,0.7,1,1.4,2} gives ppl 1 488/595/**421**/1 005/8 340 on the release and 1 086/378/**207**/332/1 567 on the edited model — both already best at s=1, edited wins at every s, so the gain is not a decoding artifact. Determinism verified twice (re-running a spec reproduces identical numbers; the shipped files reproduce their embedded metrics exactly).
+
+**Negative results, all measured** (this is the useful half):
+- Nothing that touched the body of the network improved perplexity on its own — the release is jointly calibrated, so every upstream edit costs CE until the output layer is re-solved: neutralise blocks 8–15 → ppl 15 808 (**but ARC 0.238, TQA 0.370 — those random layers really were injecting noise, and re-solving the head repairs it: 7 986 → 286**); zero the untrained embedding rows → 742; impute them from GPT-2 → 630; equalise head-row norms → 4 964; task-vector overshoot λ=2 → 1.18M.
+- Best pure merge: task vector λ=0.25 (foundation ← +25% of the Q&A delta) → cloze@5 0.079 → 0.132, MRR 0.065 → 0.089 at ppl 474.
+- **Every hand-designed fast-memory geometry made retrieval worse, not better** (applied alone): tie q↔k, copy 0.113 → 0.037; collapse keys with identity values (force a clean context bag) → 0.017; α bias −4 (fast forgetting) → 0.060; α bias +4 → 0.100; a closed-form successor-lookup written into `proj_v` (values = pre-images of each token's observed successor distribution under the fitted head) → 0.010, ppl 541–641.
+- Input-side rewrites fail hardest: replacing the embedding with the model's own (well-trained) head rows raises current-token decodability R² 0.46 → 0.83 and takes ppl 207 → **2 613**. Legible is not the same as usable.
+
+**Why the ceiling is architectural, not a fitting failure** (`surgery/src/probe_h.py`, ridge probes from `h` back onto the quantities that produced it, held-out R²): current token 0.46, previous token 0.15, memory read 0.54 — but **the causal context bag only 0.066**. The 16 position-wise LN+FFN blocks leave almost no linearly reachable context for the head, and a linear head is the only thing that can be re-derived without training. This is the concrete argument for interleaving the fast memory into the stack (or giving `fast_out` a direct path to the head) rather than more steps at the current wiring.
+
+**Two items closed / refined for AGENTS.md:**
+1. Open item 10 (catastrophic-forgetting claim was "structural, not measured") — now measured: foundation → final moves held-out wiki ppl **421 → 2 552 (6.1×)** and context-copying **11.3% → 0.7%**. The tiered schedule did not protect either.
+2. The release's capability statement ("factual top-5 = 20%") does not replicate: on 25 freshly written facts **both checkpoints score 0.000 top-5** (GPT-2-small reference: 0.280). Surgery moves that 0.000 → 0.040, i.e. still no factual capability. Multiple-choice likelihood (ARC/Wino/TQA/MMLU/HellaSwag) is at chance for GPT-2-small under the same protocol too, so those columns measure little at this scale.
+
+**Caveats:** bf16-vs-fp32 greedy agreement for the re-solved heads is 100% on the foundation build but **96.9%** on the Q&A build (D6 measured 100% for the release's own weights) — pass `--dtype fp32` to reproduce this table exactly. The Q&A-formatted fit variant (`qa_frac`) was deliberately not shipped, partly because the obekt QA corpus contains the flagship "why is the sky blue" question 2 400 times, so it would inflate exactly the demo D6 advertises. One early control run appended a probe row to the tracked `probe_stats.jsonl`; that file was restored, and the row is kept at `surgery/out/probe_control_row.jsonl`.
+
 ### Runbook for extension (exact mechanics)
 ```bash
 # 1) Phase 1 extension (auto-resumes from step in hope_foundation.pth)
@@ -234,3 +272,21 @@ Findings:
 - **Both devices scale sub-linearly but strongly with batch**: CPU 7.4x throughput at 32x batch, GPU 12.8x. Per-stream at B=32: 89 tok/s (CPU) vs 196 tok/s (GPU).
 - **T=512 B=1 prefill is faster on CPU**: with `last_only`, prefill reduces to the fast-memory chunked scan (light compute) + one position through CMS/head — too little work to amortize MPS launch overhead. GPU only pulls ahead at B>=8.
 - Practical upshot: single-user CPU-only inference is viable for this model (~380 tok/s); MPS matters mainly for concurrent/batched serving.
+
+### Weight-surgery capability suite (2026-11-05, extends D7)
+Everything below is deterministic (likelihood + greedy), from `surgery/src/eval_suite.py`, and every row — including both release checkpoints, an untrained HOPE, and GPT-2-small — went through the same code on the same tensors. Raw records: `surgery/out/*.jsonl` (105 configurations), tables: `surgery/out/tables.md`.
+
+| model | ppl wt2-test | ppl wt2-val | cloze-A @1 / @5 / MRR | cloze-B @5 (25 fresh facts) | ARC | Wino | TQA | MMLU | copy-with-cue / gain |
+|---|---|---|---|---|---|---|---|---|---|
+| untrained HOPE (random init) | 50 972 | 50 953 | 0.000 / 0.000 / 0.000 | 0.000 | 0.260 | 0.492 | 0.266 | 0.241 | 0.000 / 0.000 |
+| `hope_foundation_best` | 421 | 367 | 0.026 / 0.079 / 0.065 | 0.000 | 0.202 | 0.503 | 0.307 | 0.256 | 0.113 / 0.010 |
+| `hope_final_best` | 2 552 | 2 297 | 0.079 / 0.105 / 0.088 | 0.000 | 0.209 | 0.509 | 0.294 | 0.263 | 0.007 / 0.000 |
+| GPT-2 small (same vocab, reference) | 49 | 43 | 0.289 / 0.579 / 0.413 | 0.280 | 0.238 | 0.501 | 0.289 | 0.269 | 0.350 / 0.113 |
+| **`hope_foundation_surg1`** (shipped) | **216** | **187** | 0.026 / 0.079 / 0.060 | **0.040** | 0.195 | 0.503 | 0.307 | 0.263 | 0.100 / 0.007 |
+| **`hope_final_surg1`** (shipped) | **548** | **500** | 0.079 / 0.105 / 0.087 | 0.000 | 0.220 | 0.509 | 0.300 | 0.241 | 0.010 / 0.000 |
+
+Reading notes:
+- `cloze-A` = 38 cues (the 20 from `probe_model.py` + 18 written for this study); `cloze-B` = 25 *different* facts, written before any edit and never used to select a candidate. Both releases scoring 0.000 on cloze-B is the honest version of the published "20% top-5".
+- `copy` measures the fast memory: accuracy on 300 auto-built items where the answer is a rare token that appeared earlier in the window, versus a control that blanks only that earlier occurrence (same length, same other tokens). `gain` is the difference — the cleanest available in-context-retrieval number for this architecture.
+- MC columns sit at chance **for GPT-2-small too** under this protocol (25% for 4-option items), and shift ±1–2 pt with logit scale, so no conclusion here rests on them; they are reported to show the surgery does not regress them.
+- Per-token cost of the edits is zero: same architecture, same shapes, same inference path; only 2 of 113 tensors differ.

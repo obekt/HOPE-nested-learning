@@ -1,0 +1,48 @@
+{
+ "Reference rows (same suite, same code)": [
+  "foundation",
+  "final",
+  "untrained_hope_seed0",
+  "gpt2_small_reference"
+ ],
+ "Shipped: suite A (selection) + suite B (confirmation)": [
+  "base:identity",
+  "SHIPPEDF",
+  "final",
+  "SHIPPEDQ"
+ ],
+ "What each intervention bought, on the foundation model (suite A)": [
+  "base:identity",
+  "emb:impute_g2",
+  "cms:untrained_off",
+  "tv:lam0.25",
+  "D0.distill_r1e-3",
+  "Z03.mix.5",
+  "K2.mix.6surp",
+  "H2.mix.5surp_qa35_n600"
+ ],
+ "Memory-focused edits, alone (suite A)": [
+  "base:identity",
+  "N1.tieqk_only",
+  "N2.bagcollapse_only",
+  "N3.forget_fast",
+  "N4.retain_forever",
+  "Z13.surp_mix+bag",
+  "Z16.dst+succ.05+dst"
+ ],
+ "Input-side rewrites (suite A)": [
+  "base:identity",
+  "emb:dead_off",
+  "emb:dead_half",
+  "E1.impute+dst",
+  "P1.embH+dst",
+  "P3.embHb.5+dst"
+ ],
+ "The Q&A checkpoint (suite A)": [
+  "final",
+  "F0.final+dst",
+  "F2.final+dst_mix.5surp",
+  "G2.mix.5surp_n600",
+  "G3.tv.25found+mix.5surp"
+ ]
+}

@@ -1,0 +1,427 @@
+[
+ {
+  "name": "P1.embH+dst",
+  "steps": [
+   {
+    "op": "emb_from_head",
+    "params": {
+     "mode": "unit",
+     "target": "median_alive",
+     "blend": 1.0
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "P2.embHc+dst",
+  "steps": [
+   {
+    "op": "emb_from_head",
+    "params": {
+     "mode": "center",
+     "target": "median_alive",
+     "blend": 1.0
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "P3.embHb.5+dst",
+  "steps": [
+   {
+    "op": "emb_from_head",
+    "params": {
+     "mode": "unit",
+     "target": "median_alive",
+     "blend": 0.5
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "P4.embG2+dst",
+  "steps": [
+   {
+    "op": "emb_overwrite_g2",
+    "params": {
+     "ridge": 30.0,
+     "norm_target": "median_alive",
+     "blend": 1.0
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "P5.embG2+cms8+dst",
+  "steps": [
+   {
+    "op": "emb_overwrite_g2",
+    "params": {
+     "ridge": 30.0,
+     "norm_target": "median_alive",
+     "blend": 1.0
+    }
+   },
+   {
+    "op": "scale_cms_mlp",
+    "params": {
+     "layers": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+     ],
+     "factor": 0.0
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "P6.embH+cms8+dst",
+  "steps": [
+   {
+    "op": "emb_from_head",
+    "params": {
+     "mode": "unit",
+     "target": "median_alive",
+     "blend": 1.0
+    }
+   },
+   {
+    "op": "scale_cms_mlp",
+    "params": {
+     "layers": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+     ],
+     "factor": 0.0
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "P7.embH+tv.25+dst",
+  "steps": [
+   {
+    "op": "emb_from_head",
+    "params": {
+     "mode": "unit",
+     "target": "median_alive",
+     "blend": 1.0
+    }
+   },
+   {
+    "op": "task_vector",
+    "params": {
+     "lam": 0.25
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "P9.dst+embH+dst",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   },
+   {
+    "op": "emb_from_head",
+    "params": {
+     "mode": "unit",
+     "target": "median_alive",
+     "blend": 1.0
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "P10.dst+embG2+dst",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   },
+   {
+    "op": "emb_overwrite_g2",
+    "params": {
+     "ridge": 30.0,
+     "norm_target": "median_alive",
+     "blend": 1.0
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "CTRL.base_scale0.5",
+  "steps": [
+   {
+    "op": "logit_scale",
+    "params": {
+     "scale": 0.5
+    }
+   }
+  ]
+ },
+ {
+  "name": "CTRL.base_scale0.7",
+  "steps": [
+   {
+    "op": "logit_scale",
+    "params": {
+     "scale": 0.7
+    }
+   }
+  ]
+ },
+ {
+  "name": "CTRL.base_scale1",
+  "steps": [
+   {
+    "op": "logit_scale",
+    "params": {
+     "scale": 1.0
+    }
+   }
+  ]
+ },
+ {
+  "name": "CTRL.base_scale1.4",
+  "steps": [
+   {
+    "op": "logit_scale",
+    "params": {
+     "scale": 1.4
+    }
+   }
+  ]
+ },
+ {
+  "name": "CTRL.base_scale2",
+  "steps": [
+   {
+    "op": "logit_scale",
+    "params": {
+     "scale": 2.0
+    }
+   }
+  ]
+ },
+ {
+  "name": "CTRL.dst_scale0.5",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   },
+   {
+    "op": "logit_scale",
+    "params": {
+     "scale": 0.5
+    }
+   }
+  ]
+ },
+ {
+  "name": "CTRL.dst_scale0.7",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   },
+   {
+    "op": "logit_scale",
+    "params": {
+     "scale": 0.7
+    }
+   }
+  ]
+ },
+ {
+  "name": "CTRL.dst_scale1",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   },
+   {
+    "op": "logit_scale",
+    "params": {
+     "scale": 1.0
+    }
+   }
+  ]
+ },
+ {
+  "name": "CTRL.dst_scale1.4",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   },
+   {
+    "op": "logit_scale",
+    "params": {
+     "scale": 1.4
+    }
+   }
+  ]
+ },
+ {
+  "name": "CTRL.dst_scale2",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   },
+   {
+    "op": "logit_scale",
+    "params": {
+     "scale": 2.0
+    }
+   }
+  ]
+ }
+]

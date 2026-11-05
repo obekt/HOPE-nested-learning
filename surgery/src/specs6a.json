@@ -1,0 +1,238 @@
+[
+ {
+  "name": "CTRL.base_scale0.5",
+  "steps": [
+   {
+    "op": "logit_scale",
+    "params": {
+     "scale": 0.5
+    }
+   }
+  ]
+ },
+ {
+  "name": "CTRL.base_scale0.7",
+  "steps": [
+   {
+    "op": "logit_scale",
+    "params": {
+     "scale": 0.7
+    }
+   }
+  ]
+ },
+ {
+  "name": "CTRL.base_scale1",
+  "steps": [
+   {
+    "op": "logit_scale",
+    "params": {
+     "scale": 1.0
+    }
+   }
+  ]
+ },
+ {
+  "name": "CTRL.base_scale1.4",
+  "steps": [
+   {
+    "op": "logit_scale",
+    "params": {
+     "scale": 1.4
+    }
+   }
+  ]
+ },
+ {
+  "name": "CTRL.base_scale2",
+  "steps": [
+   {
+    "op": "logit_scale",
+    "params": {
+     "scale": 2.0
+    }
+   }
+  ]
+ },
+ {
+  "name": "CTRL.dst_scale0.5",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   },
+   {
+    "op": "logit_scale",
+    "params": {
+     "scale": 0.5
+    }
+   }
+  ]
+ },
+ {
+  "name": "CTRL.dst_scale0.7",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   },
+   {
+    "op": "logit_scale",
+    "params": {
+     "scale": 0.7
+    }
+   }
+  ]
+ },
+ {
+  "name": "CTRL.dst_scale1",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   },
+   {
+    "op": "logit_scale",
+    "params": {
+     "scale": 1.0
+    }
+   }
+  ]
+ },
+ {
+  "name": "CTRL.dst_scale1.4",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   },
+   {
+    "op": "logit_scale",
+    "params": {
+     "scale": 1.4
+    }
+   }
+  ]
+ },
+ {
+  "name": "CTRL.dst_scale2",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   },
+   {
+    "op": "logit_scale",
+    "params": {
+     "scale": 2.0
+    }
+   }
+  ]
+ },
+ {
+  "name": "H1.mix.6surp_qa20",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.6,
+     "wmode": "surprisal",
+     "qa_frac": 0.2
+    }
+   }
+  ]
+ },
+ {
+  "name": "H2.mix.5surp_qa35_n600",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 600,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal",
+     "qa_frac": 0.35
+    }
+   }
+  ]
+ },
+ {
+  "name": "H3.tv.25+mix.5surp_qa35",
+  "steps": [
+   {
+    "op": "task_vector",
+    "params": {
+     "lam": 0.25
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal",
+     "qa_frac": 0.35
+    }
+   }
+  ]
+ },
+ {
+  "name": "H4.betag+mix.5surp_qa35",
+  "steps": [
+   {
+    "op": "gate_shift",
+    "params": {
+     "d_beta": 1.0
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal",
+     "qa_frac": 0.35
+    }
+   }
+  ]
+ }
+]

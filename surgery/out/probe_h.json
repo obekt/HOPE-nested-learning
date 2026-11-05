@@ -1,0 +1,78 @@
+[
+ {
+  "tag": "released_foundation",
+  "current token e_t": {
+   "R2": 0.4623,
+   "cos": 0.6641
+  },
+  "previous token e_{t-1}": {
+   "R2": 0.1477,
+   "cos": 0.4107
+  },
+  "decayed context bag": {
+   "R2": 0.0663,
+   "cos": 0.9186
+  },
+  "fast-memory read (pre proj_out)": {
+   "R2": 0.5448,
+   "cos": 0.8007
+  }
+ },
+ {
+  "tag": "released_final",
+  "current token e_t": {
+   "R2": 0.4718,
+   "cos": 0.6687
+  },
+  "previous token e_{t-1}": {
+   "R2": 0.1454,
+   "cos": 0.4027
+  },
+  "decayed context bag": {
+   "R2": 0.056,
+   "cos": 0.916
+  },
+  "fast-memory read (pre proj_out)": {
+   "R2": 0.5468,
+   "cos": 0.7891
+  }
+ },
+ {
+  "tag": "surgery_embFromHead",
+  "current token e_t": {
+   "R2": 0.8341,
+   "cos": 0.9292
+  },
+  "previous token e_{t-1}": {
+   "R2": 0.1775,
+   "cos": 0.5451
+  },
+  "decayed context bag": {
+   "R2": 0.0354,
+   "cos": 0.9708
+  },
+  "fast-memory read (pre proj_out)": {
+   "R2": 0.5692,
+   "cos": 0.9687
+  }
+ },
+ {
+  "tag": "surgery_embFromHead+cms8off",
+  "current token e_t": {
+   "R2": 0.9101,
+   "cos": 0.9624
+  },
+  "previous token e_{t-1}": {
+   "R2": 0.1955,
+   "cos": 0.5603
+  },
+  "decayed context bag": {
+   "R2": 0.0482,
+   "cos": 0.9712
+  },
+  "fast-memory read (pre proj_out)": {
+   "R2": 0.6935,
+   "cos": 0.9771
+  }
+ }
+]

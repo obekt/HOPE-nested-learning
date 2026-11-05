@@ -1,0 +1,50 @@
+[
+ {
+  "name": "N1.tieqk_only",
+  "steps": [
+   {
+    "op": "mem_tune",
+    "params": {
+     "tie_qk": true
+    }
+   }
+  ]
+ },
+ {
+  "name": "N2.bagcollapse_only",
+  "steps": [
+   {
+    "op": "mem_tune",
+    "params": {
+     "gamma_q": 0.2,
+     "gamma_k": 0.2,
+     "v_mode": "identity",
+     "out_mode": "identity",
+     "out_scale": 0.25
+    }
+   }
+  ]
+ },
+ {
+  "name": "N3.forget_fast",
+  "steps": [
+   {
+    "op": "gate_shift",
+    "params": {
+     "d_alpha": -4.0
+    }
+   }
+  ]
+ },
+ {
+  "name": "N4.retain_forever",
+  "steps": [
+   {
+    "op": "gate_shift",
+    "params": {
+     "d_alpha": 4.0
+    }
+   }
+  ]
+ }
+]

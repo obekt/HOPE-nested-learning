@@ -1,0 +1,804 @@
+[
+ {
+  "tag": "final",
+  "ckpt": "hope_final_best.pth",
+  "step": 5273,
+  "embedding.weight": {
+   "init_norm": 0.4525,
+   "norm_mean": 0.479,
+   "norm_median": 0.4765,
+   "norm_p05": 0.4052,
+   "norm_p95": 0.5597,
+   "frac_within_10pct_of_init": 0.6092,
+   "frac_within_25pct_of_init": 0.9598,
+   "frac_shrunk_below_60pct_init": 0.0,
+   "frac_grown_above_2x_init": 0.0
+  },
+  "head.weight": {
+   "init_norm": 0.142,
+   "norm_mean": 2.4861,
+   "norm_median": 2.1856,
+   "norm_p05": 1.3202,
+   "norm_p95": 4.5976,
+   "frac_within_10pct_of_init": 0.0,
+   "frac_within_25pct_of_init": 0.0,
+   "frac_shrunk_below_60pct_init": 0.0,
+   "frac_grown_above_2x_init": 1.0
+  },
+  "rms_over_init": {
+   "cms_layers.0.net.0.weight": 1.089,
+   "cms_layers.0.net.2.weight": 0.976,
+   "cms_layers.1.net.0.weight": 1.121,
+   "cms_layers.1.net.2.weight": 0.998,
+   "cms_layers.10.net.0.weight": 0.999,
+   "cms_layers.10.net.2.weight": 0.981,
+   "cms_layers.11.net.0.weight": 0.999,
+   "cms_layers.11.net.2.weight": 0.981,
+   "cms_layers.12.net.0.weight": 0.998,
+   "cms_layers.12.net.2.weight": 0.981,
+   "cms_layers.13.net.0.weight": 0.98,
+   "cms_layers.13.net.2.weight": 0.977,
+   "cms_layers.14.net.0.weight": 0.978,
+   "cms_layers.14.net.2.weight": 0.978,
+   "cms_layers.15.net.0.weight": 0.97,
+   "cms_layers.15.net.2.weight": 0.974,
+   "cms_layers.2.net.0.weight": 1.142,
+   "cms_layers.2.net.2.weight": 1.013,
+   "cms_layers.3.net.0.weight": 1.16,
+   "cms_layers.3.net.2.weight": 1.025,
+   "cms_layers.4.net.0.weight": 1.169,
+   "cms_layers.4.net.2.weight": 1.032,
+   "cms_layers.5.net.0.weight": 1.176,
+   "cms_layers.5.net.2.weight": 1.04,
+   "cms_layers.6.net.0.weight": 1.187,
+   "cms_layers.6.net.2.weight": 1.052,
+   "cms_layers.7.net.0.weight": 1.191,
+   "cms_layers.7.net.2.weight": 1.059,
+   "cms_layers.8.net.0.weight": 1.002,
+   "cms_layers.8.net.2.weight": 0.98,
+   "cms_layers.9.net.0.weight": 1.0,
+   "cms_layers.9.net.2.weight": 0.981,
+   "embedding.weight": 1.064,
+   "fast_memory.gate_alpha.weight": 7.011,
+   "fast_memory.gate_beta.weight": 3.987,
+   "fast_memory.proj_k.weight": 0.982,
+   "fast_memory.proj_out.weight": 1.015,
+   "fast_memory.proj_q.weight": 1.127,
+   "fast_memory.proj_v.weight": 1.014,
+   "head.weight": 18.827
+  },
+  "cms_layer_drift": [
+   1.089,
+   1.121,
+   1.142,
+   1.16,
+   1.169,
+   1.176,
+   1.187,
+   1.191,
+   1.002,
+   1.0,
+   0.999,
+   0.999,
+   0.998,
+   0.98,
+   0.978,
+   0.97
+  ],
+  "head_bias": {
+   "min": -1.967,
+   "max": 0.434,
+   "mean": -0.734,
+   "std": 0.39,
+   "top20": [
+    ",",
+    "and",
+    "-",
+    "(",
+    "",
+    ".",
+    "the",
+    "in",
+    "",
+    "a",
+    "\"",
+    "to",
+    "B",
+    "of",
+    "A",
+    "is",
+    "T",
+    "or",
+    "G",
+    "D"
+   ],
+   "bottom20": [
+    "00200000",
+    "contrace",
+    "\ufffd\ufffd\ufffd\ufffd",
+    "\u001a",
+    "\u0001",
+    "\\/\\/",
+    "cloneembedreportprint",
+    "\u9f8d\u5951\u58eb",
+    "ItemImage",
+    "externalToEVA",
+    "srfN",
+    "externalToEVAOnly",
+    "\u25ac\u25ac",
+    "SetTextColor",
+    "oooooooooooooooo",
+    "\u0002",
+    "pokemon",
+    "unfocusedRange",
+    "unintention",
+    "DragonMagazine"
+   ]
+  },
+  "fast_memory": {
+   "contrib_ratio": 1.1858,
+   "alpha_mean": 0.98843,
+   "alpha_p05": 0.97287,
+   "alpha_p95": 0.9967,
+   "beta_mean": 0.39898,
+   "beta_p95": 0.58646,
+   "mem_norm_end": 0.0711,
+   "mem_norm_over_sqrtD": 0.0224
+  },
+  "cms_residual_contrib": [
+   0.2623,
+   0.2535,
+   0.2504,
+   0.2566,
+   0.2677,
+   0.2831,
+   0.2927,
+   0.293,
+   0.2475,
+   0.2258,
+   0.2273,
+   0.2364,
+   0.2455,
+   0.2611,
+   0.2907,
+   0.361
+  ],
+  "prior_agreement": 0.0181,
+  "kl_model_vs_prior": 4.0601,
+  "logit_std": 2.48,
+  "ppl_mps_check": {
+   "ce": 7.8739,
+   "ppl": 2627.779,
+   "tokens": 4055
+  }
+ },
+ {
+  "tag": "foundation",
+  "ckpt": "hope_foundation_best.pth",
+  "step": 40942,
+  "embedding.weight": {
+   "init_norm": 0.4525,
+   "norm_mean": 0.4794,
+   "norm_median": 0.4769,
+   "norm_p05": 0.4058,
+   "norm_p95": 0.5601,
+   "frac_within_10pct_of_init": 0.6083,
+   "frac_within_25pct_of_init": 0.9591,
+   "frac_shrunk_below_60pct_init": 0.0,
+   "frac_grown_above_2x_init": 0.0
+  },
+  "head.weight": {
+   "init_norm": 0.142,
+   "norm_mean": 2.2945,
+   "norm_median": 1.952,
+   "norm_p05": 1.0883,
+   "norm_p95": 4.5884,
+   "frac_within_10pct_of_init": 0.0,
+   "frac_within_25pct_of_init": 0.0,
+   "frac_shrunk_below_60pct_init": 0.0,
+   "frac_grown_above_2x_init": 1.0
+  },
+  "rms_over_init": {
+   "cms_layers.0.net.0.weight": 1.073,
+   "cms_layers.0.net.2.weight": 0.968,
+   "cms_layers.1.net.0.weight": 1.104,
+   "cms_layers.1.net.2.weight": 0.99,
+   "cms_layers.10.net.0.weight": 0.997,
+   "cms_layers.10.net.2.weight": 0.981,
+   "cms_layers.11.net.0.weight": 0.996,
+   "cms_layers.11.net.2.weight": 0.98,
+   "cms_layers.12.net.0.weight": 0.995,
+   "cms_layers.12.net.2.weight": 0.98,
+   "cms_layers.13.net.0.weight": 0.98,
+   "cms_layers.13.net.2.weight": 0.977,
+   "cms_layers.14.net.0.weight": 0.978,
+   "cms_layers.14.net.2.weight": 0.978,
+   "cms_layers.15.net.0.weight": 0.97,
+   "cms_layers.15.net.2.weight": 0.974,
+   "cms_layers.2.net.0.weight": 1.124,
+   "cms_layers.2.net.2.weight": 1.004,
+   "cms_layers.3.net.0.weight": 1.141,
+   "cms_layers.3.net.2.weight": 1.015,
+   "cms_layers.4.net.0.weight": 1.15,
+   "cms_layers.4.net.2.weight": 1.022,
+   "cms_layers.5.net.0.weight": 1.157,
+   "cms_layers.5.net.2.weight": 1.03,
+   "cms_layers.6.net.0.weight": 1.168,
+   "cms_layers.6.net.2.weight": 1.041,
+   "cms_layers.7.net.0.weight": 1.171,
+   "cms_layers.7.net.2.weight": 1.047,
+   "cms_layers.8.net.0.weight": 1.0,
+   "cms_layers.8.net.2.weight": 0.979,
+   "cms_layers.9.net.0.weight": 0.998,
+   "cms_layers.9.net.2.weight": 0.981,
+   "embedding.weight": 1.065,
+   "fast_memory.gate_alpha.weight": 7.096,
+   "fast_memory.gate_beta.weight": 3.979,
+   "fast_memory.proj_k.weight": 0.979,
+   "fast_memory.proj_out.weight": 1.013,
+   "fast_memory.proj_q.weight": 1.118,
+   "fast_memory.proj_v.weight": 1.012,
+   "head.weight": 17.826
+  },
+  "cms_layer_drift": [
+   1.073,
+   1.104,
+   1.124,
+   1.141,
+   1.15,
+   1.157,
+   1.168,
+   1.171,
+   1.0,
+   0.998,
+   0.997,
+   0.996,
+   0.995,
+   0.98,
+   0.978,
+   0.97
+  ],
+  "head_bias": {
+   "min": -1.842,
+   "max": 0.447,
+   "mean": -0.612,
+   "std": 0.384,
+   "top20": [
+    "-",
+    ",",
+    "and",
+    "",
+    "(",
+    "",
+    "\"",
+    "the",
+    ".",
+    "in",
+    "B",
+    "a",
+    "T",
+    "S",
+    "A",
+    "G",
+    "D",
+    "C",
+    "L",
+    "M"
+   ],
+   "bottom20": [
+    "00200000",
+    "contrace",
+    "\u001a",
+    "\ufffd\ufffd\ufffd\ufffd",
+    "cloneembedreportprint",
+    "\u0001",
+    "\\/\\/",
+    "\u9f8d\u5951\u58eb",
+    "SetTextColor",
+    "externalToEVA",
+    "externalToEVAOnly",
+    "srfN",
+    "\u25ac\u25ac",
+    "ItemImage",
+    "oooooooooooooooo",
+    "unintention",
+    "pokemon",
+    "FontSize",
+    "Redditor",
+    "-+-+"
+   ]
+  },
+  "fast_memory": {
+   "contrib_ratio": 1.1788,
+   "alpha_mean": 0.9894,
+   "alpha_p05": 0.97511,
+   "alpha_p95": 0.99712,
+   "beta_mean": 0.40022,
+   "beta_p95": 0.57842,
+   "mem_norm_end": 0.072,
+   "mem_norm_over_sqrtD": 0.0229
+  },
+  "cms_residual_contrib": [
+   0.2186,
+   0.214,
+   0.2194,
+   0.2243,
+   0.2373,
+   0.2473,
+   0.2562,
+   0.2666,
+   0.2493,
+   0.2312,
+   0.231,
+   0.2387,
+   0.2405,
+   0.2487,
+   0.2719,
+   0.3238
+  ],
+  "prior_agreement": 0.0139,
+  "kl_model_vs_prior": 5.0666,
+  "logit_std": 2.677,
+  "ppl_mps_check": {
+   "ce": 5.9719,
+   "ppl": 392.244,
+   "tokens": 4055
+  }
+ },
+ {
+  "task_vector": {
+   "embedding.weight": {
+    "l2": 5.279,
+    "rel": 0.0491
+   },
+   "fast_memory.proj_q.weight": {
+    "l2": 2.826,
+    "rel": 0.1117
+   },
+   "fast_memory.proj_q.bias": {
+    "l2": 0.12,
+    "rel": 0.0799
+   },
+   "fast_memory.proj_k.weight": {
+    "l2": 2.501,
+    "rel": 0.1129
+   },
+   "fast_memory.proj_k.bias": {
+    "l2": 0.047,
+    "rel": 0.2694
+   },
+   "fast_memory.proj_v.weight": {
+    "l2": 1.993,
+    "rel": 0.0871
+   },
+   "fast_memory.proj_v.bias": {
+    "l2": 0.044,
+    "rel": 0.4089
+   },
+   "fast_memory.proj_out.weight": {
+    "l2": 1.955,
+    "rel": 0.0853
+   },
+   "fast_memory.proj_out.bias": {
+    "l2": 0.041,
+    "rel": 0.2174
+   },
+   "fast_memory.gate_alpha.weight": {
+    "l2": 0.674,
+    "rel": 0.0672
+   },
+   "fast_memory.gate_alpha.bias": {
+    "l2": 0.034,
+    "rel": 0.1174
+   },
+   "fast_memory.gate_beta.weight": {
+    "l2": 0.173,
+    "rel": 0.0308
+   },
+   "fast_memory.gate_beta.bias": {
+    "l2": 0.012,
+    "rel": 0.0108
+   },
+   "norm_fast.weight": {
+    "l2": 0.083,
+    "rel": 0.0041
+   },
+   "norm_fast.bias": {
+    "l2": 0.039,
+    "rel": 0.1329
+   },
+   "cms_layers.0.net.0.weight": {
+    "l2": 4.632,
+    "rel": 0.1508
+   },
+   "cms_layers.0.net.0.bias": {
+    "l2": 0.116,
+    "rel": 0.1328
+   },
+   "cms_layers.0.net.2.weight": {
+    "l2": 3.983,
+    "rel": 0.1437
+   },
+   "cms_layers.0.net.2.bias": {
+    "l2": 0.021,
+    "rel": 0.0824
+   },
+   "cms_layers.0.norm.weight": {
+    "l2": 0.083,
+    "rel": 0.004
+   },
+   "cms_layers.0.norm.bias": {
+    "l2": 0.029,
+    "rel": 0.0666
+   },
+   "cms_layers.1.net.0.weight": {
+    "l2": 4.8,
+    "rel": 0.152
+   },
+   "cms_layers.1.net.0.bias": {
+    "l2": 0.127,
+    "rel": 0.1565
+   },
+   "cms_layers.1.net.2.weight": {
+    "l2": 4.044,
+    "rel": 0.1427
+   },
+   "cms_layers.1.net.2.bias": {
+    "l2": 0.018,
+    "rel": 0.0734
+   },
+   "cms_layers.1.norm.weight": {
+    "l2": 0.088,
+    "rel": 0.0042
+   },
+   "cms_layers.1.norm.bias": {
+    "l2": 0.028,
+    "rel": 0.0551
+   },
+   "cms_layers.2.net.0.weight": {
+    "l2": 4.872,
+    "rel": 0.1515
+   },
+   "cms_layers.2.net.0.bias": {
+    "l2": 0.134,
+    "rel": 0.1654
+   },
+   "cms_layers.2.net.2.weight": {
+    "l2": 4.071,
+    "rel": 0.1417
+   },
+   "cms_layers.2.net.2.bias": {
+    "l2": 0.018,
+    "rel": 0.0757
+   },
+   "cms_layers.2.norm.weight": {
+    "l2": 0.089,
+    "rel": 0.0043
+   },
+   "cms_layers.2.norm.bias": {
+    "l2": 0.028,
+    "rel": 0.0485
+   },
+   "cms_layers.3.net.0.weight": {
+    "l2": 4.909,
+    "rel": 0.1503
+   },
+   "cms_layers.3.net.0.bias": {
+    "l2": 0.136,
+    "rel": 0.171
+   },
+   "cms_layers.3.net.2.weight": {
+    "l2": 4.135,
+    "rel": 0.1423
+   },
+   "cms_layers.3.net.2.bias": {
+    "l2": 0.018,
+    "rel": 0.0809
+   },
+   "cms_layers.3.norm.weight": {
+    "l2": 0.088,
+    "rel": 0.0042
+   },
+   "cms_layers.3.norm.bias": {
+    "l2": 0.029,
+    "rel": 0.0475
+   },
+   "cms_layers.4.net.0.weight": {
+    "l2": 4.968,
+    "rel": 0.1509
+   },
+   "cms_layers.4.net.0.bias": {
+    "l2": 0.138,
+    "rel": 0.1743
+   },
+   "cms_layers.4.net.2.weight": {
+    "l2": 4.256,
+    "rel": 0.1455
+   },
+   "cms_layers.4.net.2.bias": {
+    "l2": 0.02,
+    "rel": 0.0854
+   },
+   "cms_layers.4.norm.weight": {
+    "l2": 0.088,
+    "rel": 0.0042
+   },
+   "cms_layers.4.norm.bias": {
+    "l2": 0.03,
+    "rel": 0.0458
+   },
+   "cms_layers.5.net.0.weight": {
+    "l2": 5.041,
+    "rel": 0.1522
+   },
+   "cms_layers.5.net.0.bias": {
+    "l2": 0.137,
+    "rel": 0.173
+   },
+   "cms_layers.5.net.2.weight": {
+    "l2": 4.361,
+    "rel": 0.148
+   },
+   "cms_layers.5.net.2.bias": {
+    "l2": 0.021,
+    "rel": 0.0842
+   },
+   "cms_layers.5.norm.weight": {
+    "l2": 0.088,
+    "rel": 0.0042
+   },
+   "cms_layers.5.norm.bias": {
+    "l2": 0.032,
+    "rel": 0.0458
+   },
+   "cms_layers.6.net.0.weight": {
+    "l2": 5.132,
+    "rel": 0.1535
+   },
+   "cms_layers.6.net.0.bias": {
+    "l2": 0.144,
+    "rel": 0.18
+   },
+   "cms_layers.6.net.2.weight": {
+    "l2": 4.497,
+    "rel": 0.151
+   },
+   "cms_layers.6.net.2.bias": {
+    "l2": 0.023,
+    "rel": 0.1099
+   },
+   "cms_layers.6.norm.weight": {
+    "l2": 0.09,
+    "rel": 0.0043
+   },
+   "cms_layers.6.norm.bias": {
+    "l2": 0.045,
+    "rel": 0.0608
+   },
+   "cms_layers.7.net.0.weight": {
+    "l2": 5.246,
+    "rel": 0.1565
+   },
+   "cms_layers.7.net.0.bias": {
+    "l2": 0.153,
+    "rel": 0.1887
+   },
+   "cms_layers.7.net.2.weight": {
+    "l2": 4.638,
+    "rel": 0.1548
+   },
+   "cms_layers.7.net.2.bias": {
+    "l2": 0.031,
+    "rel": 0.2089
+   },
+   "cms_layers.7.norm.weight": {
+    "l2": 0.08,
+    "rel": 0.004
+   },
+   "cms_layers.7.norm.bias": {
+    "l2": 0.055,
+    "rel": 0.0901
+   },
+   "cms_layers.8.net.0.weight": {
+    "l2": 1.702,
+    "rel": 0.0595
+   },
+   "cms_layers.8.net.0.bias": {
+    "l2": 0.05,
+    "rel": 0.1409
+   },
+   "cms_layers.8.net.2.weight": {
+    "l2": 1.433,
+    "rel": 0.0511
+   },
+   "cms_layers.8.net.2.bias": {
+    "l2": 0.012,
+    "rel": 0.1467
+   },
+   "cms_layers.8.norm.weight": {
+    "l2": 0.027,
+    "rel": 0.0012
+   },
+   "cms_layers.8.norm.bias": {
+    "l2": 0.017,
+    "rel": 0.0669
+   },
+   "cms_layers.9.net.0.weight": {
+    "l2": 1.753,
+    "rel": 0.0613
+   },
+   "cms_layers.9.net.0.bias": {
+    "l2": 0.053,
+    "rel": 0.1472
+   },
+   "cms_layers.9.net.2.weight": {
+    "l2": 1.507,
+    "rel": 0.0537
+   },
+   "cms_layers.9.net.2.bias": {
+    "l2": 0.014,
+    "rel": 0.1759
+   },
+   "cms_layers.9.norm.weight": {
+    "l2": 0.029,
+    "rel": 0.0013
+   },
+   "cms_layers.9.norm.bias": {
+    "l2": 0.018,
+    "rel": 0.0722
+   },
+   "cms_layers.10.net.0.weight": {
+    "l2": 1.785,
+    "rel": 0.0626
+   },
+   "cms_layers.10.net.0.bias": {
+    "l2": 0.053,
+    "rel": 0.1414
+   },
+   "cms_layers.10.net.2.weight": {
+    "l2": 1.552,
+    "rel": 0.0553
+   },
+   "cms_layers.10.net.2.bias": {
+    "l2": 0.016,
+    "rel": 0.2113
+   },
+   "cms_layers.10.norm.weight": {
+    "l2": 0.032,
+    "rel": 0.0015
+   },
+   "cms_layers.10.norm.bias": {
+    "l2": 0.021,
+    "rel": 0.086
+   },
+   "cms_layers.11.net.0.weight": {
+    "l2": 1.833,
+    "rel": 0.0643
+   },
+   "cms_layers.11.net.0.bias": {
+    "l2": 0.057,
+    "rel": 0.1458
+   },
+   "cms_layers.11.net.2.weight": {
+    "l2": 1.609,
+    "rel": 0.0574
+   },
+   "cms_layers.11.net.2.bias": {
+    "l2": 0.02,
+    "rel": 0.2852
+   },
+   "cms_layers.11.norm.weight": {
+    "l2": 0.037,
+    "rel": 0.0017
+   },
+   "cms_layers.11.norm.bias": {
+    "l2": 0.025,
+    "rel": 0.1171
+   },
+   "cms_layers.12.net.0.weight": {
+    "l2": 1.891,
+    "rel": 0.0664
+   },
+   "cms_layers.12.net.0.bias": {
+    "l2": 0.06,
+    "rel": 0.1389
+   },
+   "cms_layers.12.net.2.weight": {
+    "l2": 1.695,
+    "rel": 0.0604
+   },
+   "cms_layers.12.net.2.bias": {
+    "l2": 0.024,
+    "rel": 0.4194
+   },
+   "cms_layers.12.norm.weight": {
+    "l2": 0.044,
+    "rel": 0.002
+   },
+   "cms_layers.12.norm.bias": {
+    "l2": 0.03,
+    "rel": 0.1727
+   },
+   "cms_layers.13.net.0.weight": {
+    "l2": 0.702,
+    "rel": 0.025
+   },
+   "cms_layers.13.net.0.bias": {
+    "l2": 0.026,
+    "rel": 0.0869
+   },
+   "cms_layers.13.net.2.weight": {
+    "l2": 0.658,
+    "rel": 0.0235
+   },
+   "cms_layers.13.net.2.bias": {
+    "l2": 0.013,
+    "rel": 0.3642
+   },
+   "cms_layers.13.norm.weight": {
+    "l2": 0.017,
+    "rel": 0.0008
+   },
+   "cms_layers.13.norm.bias": {
+    "l2": 0.014,
+    "rel": 0.0988
+   },
+   "cms_layers.14.net.0.weight": {
+    "l2": 0.733,
+    "rel": 0.0262
+   },
+   "cms_layers.14.net.0.bias": {
+    "l2": 0.031,
+    "rel": 0.0952
+   },
+   "cms_layers.14.net.2.weight": {
+    "l2": 0.699,
+    "rel": 0.025
+   },
+   "cms_layers.14.net.2.bias": {
+    "l2": 0.015,
+    "rel": 0.3506
+   },
+   "cms_layers.14.norm.weight": {
+    "l2": 0.02,
+    "rel": 0.0009
+   },
+   "cms_layers.14.norm.bias": {
+    "l2": 0.017,
+    "rel": 0.0775
+   },
+   "cms_layers.15.net.0.weight": {
+    "l2": 0.714,
+    "rel": 0.0257
+   },
+   "cms_layers.15.net.0.bias": {
+    "l2": 0.036,
+    "rel": 0.0931
+   },
+   "cms_layers.15.net.2.weight": {
+    "l2": 0.697,
+    "rel": 0.025
+   },
+   "cms_layers.15.net.2.bias": {
+    "l2": 0.019,
+    "rel": 0.305
+   },
+   "cms_layers.15.norm.weight": {
+    "l2": 0.133,
+    "rel": 0.0051
+   },
+   "cms_layers.15.norm.bias": {
+    "l2": 0.053,
+    "rel": 0.0757
+   },
+   "head.weight": {
+    "l2": 287.972,
+    "rel": 0.5093
+   },
+   "head.bias": {
+    "l2": 27.812,
+    "rel": 0.1718
+   }
+  }
+ }
+]

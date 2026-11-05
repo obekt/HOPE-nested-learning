@@ -1,0 +1,95 @@
+[
+ {
+  "name": "K1.mix.65surp",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.65,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "K2.mix.6surp",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.6,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "K3.mix.5surp_n600",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 600,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "K4.mix.5surp_t0.8",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal",
+     "ttemp": 0.8
+    }
+   }
+  ]
+ },
+ {
+  "name": "K5.mix.5surp_t0.6",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal",
+     "ttemp": 0.6
+    }
+   }
+  ]
+ },
+ {
+  "name": "K6.mix.65surp_t0.8",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.65,
+     "wmode": "surprisal",
+     "ttemp": 0.8
+    }
+   }
+  ]
+ }
+]

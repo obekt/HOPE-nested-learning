@@ -1,0 +1,7 @@
+# Regenerable: tokenised corpora, and the (A, B) normal-equation caches for the
+# closed-form head solve (~100 MB each, ~30 s to recompute).
+data/
+
+# Edited checkpoints and large run logs — keep the small JSONL result files.
+out/*.pth
+downloads/

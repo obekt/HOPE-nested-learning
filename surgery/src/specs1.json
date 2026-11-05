@@ -1,0 +1,42 @@
+[
+  {"name": "base:identity", "steps": [{"op": "identity"}]},
+
+  {"name": "abl:fast_out=0", "steps": [{"op": "fast_out_scale", "params": {"factor": 0.0}}]},
+  {"name": "abl:fast_out=0.5", "steps": [{"op": "fast_out_scale", "params": {"factor": 0.5}}]},
+  {"name": "abl:fast_out=2", "steps": [{"op": "fast_out_scale", "params": {"factor": 2.0}}]},
+  {"name": "gate:a+1", "steps": [{"op": "gate_shift", "params": {"d_alpha": 1.0}}]},
+  {"name": "gate:a-1", "steps": [{"op": "gate_shift", "params": {"d_alpha": -1.0}}]},
+  {"name": "gate:a-2", "steps": [{"op": "gate_shift", "params": {"d_alpha": -2.0}}]},
+  {"name": "gate:b+1", "steps": [{"op": "gate_shift", "params": {"d_beta": 1.0}}]},
+  {"name": "gate:b-1", "steps": [{"op": "gate_shift", "params": {"d_beta": -1.0}}]},
+
+  {"name": "cms:untrained_off", "steps": [{"op": "scale_cms_mlp", "params": {"layers": [8,9,10,11,12,13,14,15], "factor": 0.0}}]},
+  {"name": "cms:untrained_half", "steps": [{"op": "scale_cms_mlp", "params": {"layers": [8,9,10,11,12,13,14,15], "factor": 0.5}}]},
+  {"name": "cms:untrained_1.5x", "steps": [{"op": "scale_cms_mlp", "params": {"layers": [8,9,10,11,12,13,14,15], "factor": 1.5}}]},
+  {"name": "cms:all_off", "steps": [{"op": "scale_cms_mlp", "params": {"layers": [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15], "factor": 0.0}}]},
+  {"name": "cms:trained_off", "steps": [{"op": "scale_cms_mlp", "params": {"layers": [0,1,2,3,4,5,6,7], "factor": 0.0}}]},
+  {"name": "cms:dup_0_7_to_8_15", "steps": [{"op": "dup_cms", "params": {"src": [0,1,2,3,4,5,6,7], "dst": [8,9,10,11,12,13,14,15]}}]},
+  {"name": "cms:dup_7x8", "steps": [{"op": "dup_cms", "params": {"src": [7,7,7,7,7,7,7,7], "dst": [8,9,10,11,12,13,14,15]}}]},
+
+  {"name": "tv:lam0.25", "steps": [{"op": "task_vector", "params": {"lam": 0.25}}]},
+  {"name": "tv:lam0.5", "steps": [{"op": "task_vector", "params": {"lam": 0.5}}]},
+  {"name": "tv:lam0.75", "steps": [{"op": "task_vector", "params": {"lam": 0.75}}]},
+  {"name": "tv:lam1.25", "steps": [{"op": "task_vector", "params": {"lam": 1.25}}]},
+  {"name": "tv:lam2", "steps": [{"op": "task_vector", "params": {"lam": 2.0}}]},
+
+  {"name": "emb:dead_off", "steps": [{"op": "emb_scale_untrained", "params": {"factor": 0.0, "thresh": 1.08}}]},
+  {"name": "emb:dead_half", "steps": [{"op": "emb_scale_untrained", "params": {"factor": 0.5, "thresh": 1.08}}]},
+  {"name": "emb:impute_g2", "steps": [{"op": "emb_impute", "params": {"source": "gpt2", "ridge": 30.0, "thresh": 1.08, "norm_mode": "median_dead", "blend": 1.0}}]},
+  {"name": "emb:impute_g2_b0.5", "steps": [{"op": "emb_impute", "params": {"source": "gpt2", "ridge": 30.0, "thresh": 1.08, "norm_mode": "median_dead", "blend": 0.5}}]},
+  {"name": "emb:impute_g2h", "steps": [{"op": "emb_impute", "params": {"source": "gpt2+head", "ridge": 30.0, "thresh": 1.08, "norm_mode": "median_dead", "blend": 1.0}}]},
+  {"name": "emb:impute_keep", "steps": [{"op": "emb_impute", "params": {"source": "gpt2", "ridge": 30.0, "thresh": 1.08, "norm_mode": "keep", "blend": 1.0}}]},
+
+  {"name": "head:equalize_1", "steps": [{"op": "head_equalize", "params": {"strength": 1.0}}]},
+  {"name": "head:equalize_half", "steps": [{"op": "head_equalize", "params": {"strength": 0.5}}]},
+  {"name": "head:bias_off", "steps": [{"op": "head_bias_scale", "params": {"factor": 0.0}}]},
+  {"name": "head:bias_half", "steps": [{"op": "head_bias_scale", "params": {"factor": 0.5}}]},
+  {"name": "head:bias_2x", "steps": [{"op": "head_bias_scale", "params": {"factor": 2.0}}]},
+
+  {"name": "ctrl:temp0.5", "steps": [{"op": "logit_scale", "params": {"scale": 0.5}}]},
+  {"name": "ctrl:temp2", "steps": [{"op": "logit_scale", "params": {"scale": 2.0}}]}
+]

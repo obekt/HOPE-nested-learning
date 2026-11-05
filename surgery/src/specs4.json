@@ -1,0 +1,403 @@
+[
+ {
+  "name": "Z01.surp",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "Z02.rare",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "wmode": "raretgt"
+    }
+   }
+  ]
+ },
+ {
+  "name": "Z03.mix.5",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5
+    }
+   }
+  ]
+ },
+ {
+  "name": "Z04.mix.7",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.7
+    }
+   }
+  ]
+ },
+ {
+  "name": "Z05.mix.5surp",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "Z06.mix.5surp_r1e-2",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.01,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "Z07.mix.5surp_r1e-4",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.0001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "Z08.mix.5surp_t1.25",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal",
+     "ttemp": 1.25
+    }
+   }
+  ]
+ },
+ {
+  "name": "Z09.surp_mix+cms8off",
+  "steps": [
+   {
+    "op": "scale_cms_mlp",
+    "params": {
+     "layers": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+     ],
+     "factor": 0.0
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "Z10.surp_mix+cmsalloff",
+  "steps": [
+   {
+    "op": "scale_cms_mlp",
+    "params": {
+     "layers": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+     ],
+     "factor": 0.0
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "Z11.surp_mix+tv.25",
+  "steps": [
+   {
+    "op": "task_vector",
+    "params": {
+     "lam": 0.25
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "Z12.surp_mix+impute",
+  "steps": [
+   {
+    "op": "emb_impute",
+    "params": {
+     "source": "gpt2",
+     "ridge": 30.0,
+     "thresh": 1.08,
+     "norm_mode": "median_dead",
+     "blend": 1.0
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "Z13.surp_mix+bag",
+  "steps": [
+   {
+    "op": "mem_tune",
+    "params": {
+     "gamma_q": 0.2,
+     "gamma_k": 0.2,
+     "v_mode": "identity",
+     "out_mode": "identity",
+     "out_scale": 0.25
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "Z14.surp_mix_qa35",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal",
+     "qa_frac": 0.35
+    }
+   }
+  ]
+ },
+ {
+  "name": "Z15.succ.05+dst",
+  "steps": [
+   {
+    "op": "succ_vmap",
+    "params": {
+     "vscale": 0.05,
+     "n_windows": 3000
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "Z16.dst+succ.05+dst",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   },
+   {
+    "op": "succ_vmap",
+    "params": {
+     "vscale": 0.05,
+     "n_windows": 3000
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "Z17.dst+succ.2+dst",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   },
+   {
+    "op": "succ_vmap",
+    "params": {
+     "vscale": 0.2,
+     "n_windows": 3000
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "Z18.dst+succ1+bag+dst",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   },
+   {
+    "op": "succ_vmap",
+    "params": {
+     "vscale": 1.0,
+     "n_windows": 3000
+    }
+   },
+   {
+    "op": "mem_tune",
+    "params": {
+     "gamma_q": 0.2,
+     "gamma_k": 0.2,
+     "out_mode": "identity",
+     "out_scale": 0.3
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ }
+]

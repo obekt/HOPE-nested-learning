@@ -1,0 +1,94 @@
+{
+ "label": "surgq",
+ "ckpt": "hope_final_surg1.pth",
+ "step": 5273,
+ "val_loss": 3.504122281074524,
+ "ppl_wt2_test": {
+  "ce": 6.307,
+  "ppl": 548.386,
+  "tokens": 32510
+ },
+ "cloze_A": {
+  "top1": 0.0789,
+  "top5": 0.1053,
+  "mrr": 0.0873,
+  "n": 38,
+  "mean_entropy": 6.161,
+  "mean_top1_prob": 0.198
+ },
+ "mc_arc_challenge": {
+  "n": 277,
+  "acc_normalized": 0.2202,
+  "acc_raw": 0.2094,
+  "first_tok_acc": 0.0,
+  "mc2_like": 0.2415,
+  "mean_logp_gold": -7.535
+ },
+ "mc_winogrande": {
+  "n": 1267,
+  "acc_normalized": 0.5091,
+  "acc_raw": 0.5051,
+  "first_tok_acc": 0.0,
+  "mc2_like": 0.5039,
+  "mean_logp_gold": -11.543
+ },
+ "mc_truthfulqa": {
+  "n": 817,
+  "acc_normalized": 0.2999,
+  "acc_raw": 0.2411,
+  "first_tok_acc": 0.0,
+  "mc2_like": 0.2535,
+  "mean_logp_gold": -6.394
+ },
+ "mc_hellaswag": {
+  "n": 400,
+  "acc_normalized": 0.2425,
+  "acc_raw": 0.245,
+  "first_tok_acc": 0.0,
+  "mc2_like": 0.2497,
+  "mean_logp_gold": -6.487
+ },
+ "copy": {
+  "n": 300,
+  "acc_with_cue": 0.01,
+  "acc_blank_cue": 0.01,
+  "gain": 0.0,
+  "mean_rank_with": 4800.47,
+  "mean_rank_blank": 4912.2
+ },
+ "qa_A": {
+  "n_unique": 5
+ },
+ "ppl_wt2_val": {
+  "ce": 6.2142,
+  "ppl": 499.817,
+  "tokens": 32438
+ },
+ "cloze_B": {
+  "top1": 0.0,
+  "top5": 0.0,
+  "mrr": 0.0012,
+  "n": 25,
+  "mean_entropy": 6.692,
+  "mean_top1_prob": 0.1622
+ },
+ "mc_mmlu": {
+  "n": 320,
+  "acc_normalized": 0.2406,
+  "acc_raw": 0.2188,
+  "first_tok_acc": 0.0,
+  "mc2_like": 0.257,
+  "mean_logp_gold": -8.279
+ },
+ "mc_hellaswag_B": {
+  "n": 400,
+  "acc_normalized": 0.245,
+  "acc_raw": 0.2475,
+  "first_tok_acc": 0.0,
+  "mc2_like": 0.2478,
+  "mean_logp_gold": -6.49
+ },
+ "qa_B": {
+  "n_unique": 2
+ }
+}

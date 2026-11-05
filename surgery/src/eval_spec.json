@@ -1,0 +1,110 @@
+{
+  "_note": "PRE-REGISTERED 2026-11-05, written before any weight edit was measured. Suite A = selection metrics. Suite B = confirmation metrics, never used to choose a surgery. Do not edit these lists after results exist; add a new file instead.",
+
+  "cloze_repo_A": [
+    ["The capital of France is", " Paris"],
+    ["The capital of Germany is", " Berlin"],
+    ["The capital of Japan is", " Tokyo"],
+    ["The capital of Italy is", " Rome"],
+    ["The capital of Spain is", " Madrid"],
+    ["Romeo and Juliet was written by", " Shakespeare"],
+    ["Albert Einstein was a famous", " physicist"],
+    ["The largest planet in the solar system is", " Jupiter"],
+    ["The sun rises in the", " east"],
+    ["Water boils at 100 degrees", " Celsius"],
+    ["The chemical formula for water is H2", "O"],
+    ["World War II ended in the year", " 1945"],
+    ["The language spoken in France is", " French"],
+    ["The currency of the United States is the", " dollar"],
+    ["Mount Everest is the tallest mountain in the", " world"],
+    ["The human heart pumps", " blood"],
+    ["The Earth orbits around the", " Sun"],
+    ["Photosynthesis converts sunlight into chemical", " energy"],
+    ["The first person to walk on the Moon was Neil", " Armstrong"],
+    ["Ice turns into water when it starts to", " melt"]
+  ],
+
+  "cloze_new_A": [
+    ["The capital of Russia is", " Moscow"],
+    ["The capital of China is", " Beijing"],
+    ["The capital of Egypt is", " Cairo"],
+    ["The largest ocean on Earth is the", " Pacific"],
+    ["The longest river in the world is the", " Nile"],
+    ["Water freezes at", " 0"],
+    ["The gas plants absorb from the air for photosynthesis is", " carbon"],
+    ["The planet known as the Red Planet is", " Mars"],
+    ["Humans breathe in oxygen and breathe out", " carbon"],
+    ["The study of living organisms is called", " biology"],
+    ["The chemical symbol for gold is", " Au"],
+    ["The smallest prime number is", " 2"],
+    ["Harry Potter was written by the author", " Rowling"],
+    ["The play Hamlet was written by", " Shakespeare"],
+    ["The continent where Kenya is located is", " Africa"],
+    ["The Great Wall is a famous landmark in", " China"],
+    ["Tokyo is the capital city of", " Japan"],
+    ["An animal that eats only plants is called a", " herbivore"]
+  ],
+
+  "cloze_holdout_B": [
+    ["The capital of Canada is", " Ottawa"],
+    ["The capital of India is", " New"],
+    ["The capital of Australia is", " Canberra"],
+    ["The capital of Argentina is", " Buenos"],
+    ["The second person to walk on the Moon was", " Aldrin"],
+    ["The theory of relativity was developed by", " Einstein"],
+    ["The play Othello was written by", " Shakespeare"],
+    ["The chemical symbol for iron is", " Fe"],
+    ["The chemical symbol for sodium is", " Na"],
+    ["The largest desert in the world is the", " Sahara"],
+    ["The longest river in South America is the", " Amazon"],
+    ["The tallest mountain in Africa is", " Kilimanjaro"],
+    ["The currency of Japan is the", " yen"],
+    ["The currency of the United Kingdom is the", " pound"],
+    ["The language spoken in Brazil is", " Portuguese"],
+    ["The language spoken in Mexico is", " Spanish"],
+    ["Diamond is made of the element", " carbon"],
+    ["The planet with a prominent ring system is", " Saturn"],
+    ["The ocean between Europe and North America is the", " Atlantic"],
+    ["The organ that filters blood in the human body is the", " kidney"],
+    ["The part of a plant that conducts photosynthesis is the", " leaf"],
+    ["Bats navigate at night using", " echolocation"],
+    ["A larva becomes an adult during", " metamorphosis"],
+    ["The boiling point of water decreases at high", " altitude"],
+    ["Evolution by natural selection was proposed by", " Darwin"]
+  ],
+
+  "mc_suites_A": {
+    "arc_challenge": {"split": "test", "limit": 277},
+    "winogrande": {"name": "allenai/winogrande", "config": "winogrande_xl", "split": "validation", "limit": 1267},
+    "truthfulqa": {"split": "mc1", "limit": 818},
+    "hellaswag": {"split": "validation", "limit": 400, "seed": 0}
+  },
+  "mc_suites_B": {
+    "mmlu": {"split": "test", "subjects": ["high_school_biology", "college_biology", "astronomy", "global_facts", "high_school_geography", "professional_medicine", "management", "marketing"], "per_subject": 40},
+    "hellaswag_B": {"split": "validation", "limit": 400, "seed": 1}
+  },
+
+  "qa_prompts_A": [
+    "Question: Why is the sky blue?\nAnswer:",
+    "Question: What is the capital of France?\nAnswer:",
+    "Question: Who wrote Romeo and Juliet?\nAnswer:",
+    "Question: What is water made of?\nAnswer:",
+    "Question: How many legs does a dog have?\nAnswer:"
+  ],
+  "qa_prompts_B": [
+    "Question: What do plants need to grow?\nAnswer:",
+    "Question: Why do we dream?\nAnswer:"
+  ],
+
+  "primary_metrics": [
+    "ppl_wikitext2_test (A) / ppl_wikitext2_val (B)",
+    "cloze top1 + MRR, suite A vs holdout B",
+    "MC accuracy normalized: ARC-C/Wino/TruthfulQA/HellaSwag (A) vs MMLU/HellaSwag-B (B)",
+    "copy_gain (context retrieval through the fast memory)"
+  ],
+
+  "controls": [
+    "temperature sweep (head scale) must NOT explain any claimed gain",
+    "any metric moved by a global logit rescale alone is a decoding artifact, reported separately"
+  ]
+}

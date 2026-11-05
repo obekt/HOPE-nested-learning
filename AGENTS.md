@@ -30,7 +30,8 @@ Core idea: Intelligence is a nested optimization problem, not just deep layers. 
 | `test_fixes.py` | Regression tests from earlier code reviews. |
 | `probe_model.py` | Learning-probe harness: 20 factual cloze probes + Q&A/generation samples against any checkpoint (CPU copy, no training interference). Appends `probe_stats.jsonl`. `--report` prints the accumulated table. |
 | `extend_training.py` / `extend_phase2.py` | Marathon drivers: resume foundation training with new budget/data/val protocol (D4 in `EXPERIMENT_LOG.md`), then re-seed + run extended Q&A fine-tune. |
-| `EXPERIMENT.md` / `EXPERIMENT_LOG.md` | The 48k-marathon experiment report (public) and its decision/measurement log (D1–D5). |
+| `EXPERIMENT.md` / `EXPERIMENT_LOG.md` | The 48k-marathon experiment report (public) and its decision/measurement log (D1–D7). |
+| `surgery/` | **Training-free weight-surgery study (2026-11-05).** `surgery/README.md` is the writeup; `surgery/src/` holds the ops (`surgeries.py`), the frozen capability suite (`eval_spec.json` + `eval_suite.py`), the closed-form head solver (`distill_head.py`), the artifact builder/verifier, and weight diagnostics; `surgery/out/` holds 105 measured configurations and the edited checkpoints (`.pth`, gitignored). Import its model code from `train_hope.py` as usual — surgery adds no runtime dependency. |
 | `requirements.txt` | Python dependencies. |
 
 ---
@@ -90,6 +91,38 @@ Logits
    - Measured (86M model, MPS): prefill T=512 12.8→5.1 ms, generation 387→~500 tok/s.
 
 ---
+
+### What the released weights actually contain (measured 2026-11-05, `surgery/`)
+Useful for anyone touching the architecture or the training schedule — these are
+measurements of the `v0.1-marathon` binaries, not opinions:
+
+- **The output head is the only well-trained matrix**: `head.weight` rms is 18.8× its
+  Xavier init and all 50,257 rows grew ≥4.6×. `head.bias` is a sane learned unigram
+  prior: its highest-bias tokens are punctuation and high-frequency words, its
+  lowest are GPT-2's junk tokens).
+- **61% of `embedding.weight` rows are still at random init** (low-frequency half:
+  element std 0.01998 vs 0.02000 at init, Gaussian to 3 decimal places in the 4th
+  moment). cos(embedding row, head row) = 0.014 — input and output spaces are unrelated.
+- **Half the depth never moved**: CMS blocks 8–15 (tier 1/2, periods 4/16) sit at
+  0.97–1.00× their *random init*; blocks 0–7 reached 1.09–1.19×. Slow tiers being
+  updated every 4th/16th step effectively means "stays a random feature map" at this
+  budget — which is why they measurably *inject noise* (zeroing blocks 8–15 raises ARC
+  0.202→0.238 and TruthfulQA 0.307→0.370 while wrecking perplexity 421→15,808, and a
+  re-solved head repairs the perplexity: 7,986→286).
+- **Fast memory: gates trained, projections not.** `gate_alpha` 7.0× and `gate_beta`
+  4.0× their init, but `proj_q/k/v/out` at 0.98–1.13× — the associative read/write
+  geometry stayed random while only write strength/retention were learned. Ablating
+  `proj_out` costs ppl 421→1,535 and context-copying 11.3%→1.0%, so the channel is
+  load-bearing, just weak.
+- **The context signal is lost before the head.** Ridge probes from `h` (post-CMS,
+  pre-head) recover the current token at R² 0.46, the previous token at 0.15, the
+  memory read at 0.54 — and the **causal context bag at only 0.066**. A linear
+  readout therefore cannot exploit what the fast memory integrates: interleave the
+  memory into the stack, or give `fast_out` a direct path to the head.
+- **Rare tokens get the longest output rows**: corr(‖head row‖, head.bias) = −0.967.
+- **HOPE's head is 63% linearly predictable from GPT-2's same-id token embedding**
+  (held-out, centred R²) — the two models share the 50,257-id vocabulary exactly,
+  which is what makes closed-form transfer between them possible.
 
 ## ⚙️ Configuration
 
@@ -203,6 +236,7 @@ python generate.py --prompt "Why is the sky blue?" --temperature 0.7
 | Loss flat at ~10.8 for first 500 steps | Random guessing across 50K vocab is hard | Normal. Wait until LR warms up. Should drop by step 1000. |
 | Out of Memory on MPS | 86M params + large activations | Reduce `batch_size` to 2 or `seq_len` to 256. |
 | Output is gibberish | Model trained without foundation (Q&A only) | Must run full pipeline: Wikipedia first, then Q&A. |
+| Edited (surgery) checkpoints drift slightly under bf16 | A re-solved head has larger row norms than a trained one | Measured greedy bf16-vs-fp32 agreement: 100% on `hope_foundation_surg1.pth`, 96.9% on `hope_final_surg1.pth` (the release's own weights: 100%). Pass `--dtype fp32` when reproducing published numbers. |
 | ~~Training froze for minutes every 60 s~~ | `run_validation` re-iterated the val IterableDataset, re-streaming 100k skipped HF samples per call | **FIXED**: 50 val batches cached once at startup. |
 | NaN/−inf risk in chunked scan | log(α) with underflowed α | **FIXED**: `F.logsigmoid` on the gate pre-activation; all decay factors are exp of non-positive pairwise differences. |
 | ~~Chat/generate output is pure whitespace~~ | Scripts hardcoded the `Question:/Answer:` wrapper, which is out-of-distribution for the foundation (packed-Wikipedia) model — sampling collapses to spaces | **FIXED**: checkpoints store `qa_format`; `uses_qa_format()` auto-detects (filename fallback for old checkpoints); chat/generate/app/test_model all use `wrap_prompt()`. Overrides: `generate.py --raw/--qa`, `chat.py /format raw|qa`. |
@@ -229,9 +263,11 @@ python generate.py --prompt "Why is the sky blue?" --temperature 0.7
 7. **Weight transfer from GPT-2** — Not directly possible due to architecture mismatch. But could initialize embeddings from GPT-2's embedding layer (same vocab, same size if d_model=768).
 8. **Knowledge Distillation** — Use GPT-2 or GPT-4o-mini to generate "teacher" answers for the Q&A dataset. Train HOPE to match teacher logits.
 9. ~~**Multi-scale CMS**~~ — **DONE.** Fast/Medium/Slow tiers with per-tier optimizers and update periods (`cms_tiers` in CONFIG, `build_nested_optimizers()`, the NESTED UPDATE block in `train()`). Behavioral tests in `test_nested.py`.
-10. **Benchmark forgetting** — Measure Phase 1 val loss before/after Phase 2 to quantify how much the tiered schedule actually mitigates catastrophic forgetting (claim is currently structural, not measured).
+10. ~~**Benchmark forgetting**~~ — **MEASURED (2026-11-05, D7).** Going from the 48k-step foundation to the 6k-step Q&A fine-tune moves held-out wiki perplexity **421 → 2,552 (6.1×)** and in-context copying **11.3% → 0.7%** (`surgery/`). The tiered slow-weight schedule did not protect the language model or the memory's usability at this budget — mitigating that (slower-tier LR, replay of phase-1 data, or an actual consolidation loss) is now a measured problem, not a claim.
 11. ~~**Parallelize the fast-memory scan**~~ — **DONE.** Exact chunk-parallel gated delta rule (`_chunked_delta_scan`, 22× layer / ~5× total step speedup on MPS). Equivalence tests in `test_chunked.py`.
 12. **TBPTT across batches** — Memory state is reset every batch (`state=None`); carrying it across windows would train long-horizon memory behavior.
+13. **Give the fast memory a path to the head** — measured bottleneck (see "What the released weights actually contain"): the context the delta-rule memory integrates has linear recoverability R² ≈ 0.07 at the head's input, after 16 position-wise LN+FFN blocks. Interleave `SelfModifyingLayer` between CMS blocks, or add a direct skip from `fast_out` to the logits. This is where any retrieval/in-context capability is currently being lost, and it is an architecture change, not a training-budget one.
+14. **Train the slow tiers, or delete them** — blocks 8–15 are at random init and measurably *inject noise* into the residual stream; either give them real gradient signal (they only step every 4/16 updates) or shorten the stack.
 
 ---
 

@@ -1,0 +1,898 @@
+[
+ {
+  "name": "D0.distill_r1e-3",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001
+    }
+   }
+  ]
+ },
+ {
+  "name": "D1.distill_r1e-2",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.01
+    }
+   }
+  ]
+ },
+ {
+  "name": "D2.distill_r1e-4",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.0001
+    }
+   }
+  ]
+ },
+ {
+  "name": "D3.distill_t1.5",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "ttemp": 1.5
+    }
+   }
+  ]
+ },
+ {
+  "name": "D4.distill_t2.5",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "ttemp": 2.5
+    }
+   }
+  ]
+ },
+ {
+  "name": "D5.distill_a0.5",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "alpha": 0.5
+    }
+   }
+  ]
+ },
+ {
+  "name": "D6.distill_n600",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 600,
+     "stride": 2,
+     "ridge": 0.001
+    }
+   }
+  ]
+ },
+ {
+  "name": "W1.dst_surp",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "W2.dst_rare",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "wmode": "raretgt"
+    }
+   }
+  ]
+ },
+ {
+  "name": "W3.dst_surp2",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "wmode": "surprisal2"
+    }
+   }
+  ]
+ },
+ {
+  "name": "W4.dst_surp_mix.5",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "wmode": "surprisal",
+     "mixbase": 0.5
+    }
+   }
+  ]
+ },
+ {
+  "name": "W5.dst_surp_r1e-2",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.01,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "W6.dst_surp_r1e-4",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.0001,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "W7.dst_surp_t1.25",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "wmode": "surprisal",
+     "ttemp": 1.25
+    }
+   }
+  ]
+ },
+ {
+  "name": "W8.surp+cms8",
+  "steps": [
+   {
+    "op": "scale_cms_mlp",
+    "params": {
+     "layers": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+     ],
+     "factor": 0.0
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "W9.surp+tv.25",
+  "steps": [
+   {
+    "op": "task_vector",
+    "params": {
+     "lam": 0.25
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "W10.surp+impute",
+  "steps": [
+   {
+    "op": "emb_impute",
+    "params": {
+     "source": "gpt2",
+     "ridge": 30.0,
+     "thresh": 1.08,
+     "norm_mode": "median_dead",
+     "blend": 1.0
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "W11.surp+bag",
+  "steps": [
+   {
+    "op": "mem_tune",
+    "params": {
+     "gamma_q": 0.2,
+     "gamma_k": 0.2,
+     "v_mode": "identity",
+     "out_mode": "identity",
+     "out_scale": 0.25
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "C1.cms8off+dst",
+  "steps": [
+   {
+    "op": "scale_cms_mlp",
+    "params": {
+     "layers": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+     ],
+     "factor": 0.0
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001
+    }
+   }
+  ]
+ },
+ {
+  "name": "C2.cmsAllOff+dst",
+  "steps": [
+   {
+    "op": "scale_cms_mlp",
+    "params": {
+     "layers": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+     ],
+     "factor": 0.0
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001
+    }
+   }
+  ]
+ },
+ {
+  "name": "C3.cms8half+dst",
+  "steps": [
+   {
+    "op": "scale_cms_mlp",
+    "params": {
+     "layers": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+     ],
+     "factor": 0.5
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001
+    }
+   }
+  ]
+ },
+ {
+  "name": "C4.cms15off+dst",
+  "steps": [
+   {
+    "op": "scale_cms_mlp",
+    "params": {
+     "layers": [
+      15
+     ],
+     "factor": 0.0
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001
+    }
+   }
+  ]
+ },
+ {
+  "name": "E1.impute+dst",
+  "steps": [
+   {
+    "op": "emb_impute",
+    "params": {
+     "source": "gpt2",
+     "ridge": 30.0,
+     "thresh": 1.08,
+     "norm_mode": "median_dead",
+     "blend": 1.0
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001
+    }
+   }
+  ]
+ },
+ {
+  "name": "E2.deadmute+dst",
+  "steps": [
+   {
+    "op": "emb_scale_untrained",
+    "params": {
+     "factor": 0.0,
+     "thresh": 1.08
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001
+    }
+   }
+  ]
+ },
+ {
+  "name": "M1.tieqk+dst",
+  "steps": [
+   {
+    "op": "mem_tune",
+    "params": {
+     "tie_qk": true
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001
+    }
+   }
+  ]
+ },
+ {
+  "name": "M2.bag.25+dst",
+  "steps": [
+   {
+    "op": "mem_tune",
+    "params": {
+     "gamma_q": 0.2,
+     "gamma_k": 0.2,
+     "v_mode": "identity",
+     "out_mode": "identity",
+     "out_scale": 0.25
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001
+    }
+   }
+  ]
+ },
+ {
+  "name": "M3.bag.75+dst",
+  "steps": [
+   {
+    "op": "mem_tune",
+    "params": {
+     "gamma_q": 0.2,
+     "gamma_k": 0.2,
+     "v_mode": "identity",
+     "out_mode": "identity",
+     "out_scale": 0.75
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001
+    }
+   }
+  ]
+ },
+ {
+  "name": "M4.bag.25+cms8+dst",
+  "steps": [
+   {
+    "op": "mem_tune",
+    "params": {
+     "gamma_q": 0.2,
+     "gamma_k": 0.2,
+     "v_mode": "identity",
+     "out_mode": "identity",
+     "out_scale": 0.25
+    }
+   },
+   {
+    "op": "scale_cms_mlp",
+    "params": {
+     "layers": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+     ],
+     "factor": 0.0
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001
+    }
+   }
+  ]
+ },
+ {
+  "name": "G1.betag+dst",
+  "steps": [
+   {
+    "op": "gate_shift",
+    "params": {
+     "d_beta": 1.0
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001
+    }
+   }
+  ]
+ },
+ {
+  "name": "T1.tv.5+dst",
+  "steps": [
+   {
+    "op": "task_vector",
+    "params": {
+     "lam": 0.5
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001
+    }
+   }
+  ]
+ },
+ {
+  "name": "Q1.dst_qa35",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "qa_frac": 0.35
+    }
+   }
+  ]
+ },
+ {
+  "name": "X1.tv.25+dst",
+  "steps": [
+   {
+    "op": "task_vector",
+    "params": {
+     "lam": 0.25
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001
+    }
+   }
+  ]
+ },
+ {
+  "name": "X2.dst_a0.75",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "alpha": 0.75
+    }
+   }
+  ]
+ },
+ {
+  "name": "X3.dst_a0.25",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "alpha": 0.25
+    }
+   }
+  ]
+ },
+ {
+  "name": "X4.tv.25+dst_a0.5",
+  "steps": [
+   {
+    "op": "task_vector",
+    "params": {
+     "lam": 0.25
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "alpha": 0.5
+    }
+   }
+  ]
+ },
+ {
+  "name": "X5.tv.25+cms8+dst",
+  "steps": [
+   {
+    "op": "task_vector",
+    "params": {
+     "lam": 0.25
+    }
+   },
+   {
+    "op": "scale_cms_mlp",
+    "params": {
+     "layers": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+     ],
+     "factor": 0.0
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001
+    }
+   }
+  ]
+ },
+ {
+  "name": "X6.tv.25+dst_a0.75",
+  "steps": [
+   {
+    "op": "task_vector",
+    "params": {
+     "lam": 0.25
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "alpha": 0.75
+    }
+   }
+  ]
+ },
+ {
+  "name": "X7.impute+tv.25+dst",
+  "steps": [
+   {
+    "op": "emb_impute",
+    "params": {
+     "source": "gpt2",
+     "ridge": 30.0,
+     "thresh": 1.08,
+     "norm_mode": "median_dead",
+     "blend": 1.0
+    }
+   },
+   {
+    "op": "task_vector",
+    "params": {
+     "lam": 0.25
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001
+    }
+   }
+  ]
+ },
+ {
+  "name": "X8.betag+tv.25+dst",
+  "steps": [
+   {
+    "op": "gate_shift",
+    "params": {
+     "d_beta": 1.0
+    }
+   },
+   {
+    "op": "task_vector",
+    "params": {
+     "lam": 0.25
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001
+    }
+   }
+  ]
+ },
+ {
+  "name": "Y1.dst_mix.3",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.3
+    }
+   }
+  ]
+ },
+ {
+  "name": "Y2.dst_mix.5",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5
+    }
+   }
+  ]
+ },
+ {
+  "name": "Y3.dst_mix.7",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.7
+    }
+   }
+  ]
+ },
+ {
+  "name": "Y4.dst_mix.5_qa",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "qa_frac": 0.35
+    }
+   }
+  ]
+ },
+ {
+  "name": "Y5.dst_mix.5_t1.5",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "ttemp": 1.5
+    }
+   }
+  ]
+ },
+ {
+  "name": "Y6.tv.25+mix.5",
+  "steps": [
+   {
+    "op": "task_vector",
+    "params": {
+     "lam": 0.25
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5
+    }
+   }
+  ]
+ },
+ {
+  "name": "Y7.betag+mix.5",
+  "steps": [
+   {
+    "op": "gate_shift",
+    "params": {
+     "d_beta": 1.0
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5
+    }
+   }
+  ]
+ }
+]

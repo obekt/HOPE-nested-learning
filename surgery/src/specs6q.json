@@ -1,0 +1,91 @@
+[
+ {
+  "name": "G1.mix.6surp",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.6,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "G2.mix.5surp_n600",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 600,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "G3.tv.25found+mix.5surp",
+  "steps": [
+   {
+    "op": "task_vector",
+    "params": {
+     "lam": 0.25
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "G4.deadhalf+mix.5surp",
+  "steps": [
+   {
+    "op": "emb_scale_untrained",
+    "params": {
+     "factor": 0.5,
+     "thresh": 1.08
+    }
+   },
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal"
+    }
+   }
+  ]
+ },
+ {
+  "name": "G5.mix.5surp_qa20",
+  "steps": [
+   {
+    "op": "distill_head",
+    "params": {
+     "n_windows": 300,
+     "stride": 2,
+     "ridge": 0.001,
+     "mixbase": 0.5,
+     "wmode": "surprisal",
+     "qa_frac": 0.2
+    }
+   }
+  ]
+ }
+]
