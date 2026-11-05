@@ -22,15 +22,57 @@ Standard Large Language Models (LLMs) suffer from **"Anterograde Amnesia"**—on
 ## 🚀 Key Features
 
 * **🧠 Inner-Loop Fast Memory:** Delta-rule fast-weight memory (error-driven writes, learned gates) that adapts to the immediate prompt token-by-token.
-* **⚡ Fast State-Passing Inference:** Optimized $O(N)$ generation algorithm that carries model memory forward. Verified by an equivalence test (`test_nested.py`): full-sequence forward ≡ token-by-token forward. On Apple MPS: **bf16 weights** (validated quality-identical, fp32 memory state), **last-position-only prefill** (2.5× faster at T=512), optional `torch.compile` for generation steps, and nucleus+repetition-penalty sampling — ~500 tok/s generation end-to-end.
+* **⚡ Fast State-Passing Inference:** Optimized $O(N)$ generation algorithm that carries model memory forward. Verified by an equivalence test (`test_nested.py`): full-sequence forward ≡ token-by-token forward. On Apple MPS: **bf16 weights** (greedy-identical for *trained* weights; fp32 memory state), **last-position-only prefill** (2.5× faster at T=512), optional `torch.compile` for generation steps, and nucleus+repetition-penalty sampling — ~500 tok/s generation end-to-end.
 * **🧮 Chunk-Parallel Fast-Memory Scan:** The delta-rule recurrence (a *gated delta rule*, as in DeltaNet/Gated DeltaNet) is evaluated in an exact chunk-parallel form during training and prompt prefill — 22× faster layer fwd+bwd on Apple MPS (~5× per training step), mathematically identical to the token loop (verified in float64 to ~1e-13 in `test_chunked.py`).
 * **🕰️ Continuum Memory System (CMS):** Layers are partitioned into tiers with different optimizer update periods — by default Fast (every step), Medium (every 4 steps), Slow (every 16 steps), with gradients averaged in between. Configured via `cms_tiers` in `CONFIG`.
 * **⚡ Ultra-Lightweight:** Designed to run on **Consumer Hardware** (Mac M1/M2/M3/M4, NVIDIA RTX 3060+, or even CPU).
-* **🔄 Continual Learning (experimental):** The multi-frequency tiers mean fine-tuning predominantly moves fast tiers while slow tiers consolidate. This mitigates forgetting structurally; it is not yet benchmarked.
+* **🔄 Continual Learning (experimental, and *not* working at this budget):** The multi-frequency tiers are meant to let fine-tuning move fast tiers while slow tiers consolidate. **Measured 2026-11-05: it did not protect anything here** — going from the 48k-step foundation to the 6k-step Q&A fine-tune moved held-out Wikipedia perplexity **421 → 2 552 (6.1× worse)** and in-context copying **11.3% → 0.7%** ([`surgery/README.md`](surgery/README.md), D7). The mechanism is implemented and tested; its *benefit* is unproven and currently contradicted.
 * **📱 Consumer Device Ready:** Optimized <1GB RAM footprint for inference on everyday hardware.
 * **🛡️ Padding Masking & Memory Integrity:** Binary masking in the self-modifying layers prevents "Padding Leakage," ensuring the model's memory stays pure during fine-tuning on isolated datasets.
 * **📝 Automatic Instruction Tuning:** Built-in formatting that turns raw multi-column datasets into structured assistant prompts (Question/Answer/Reasoning).
 * **🔤 GPT-2 Tokenizer:** Uses a real subword tokenizer (50K vocab, Rust `GPT2TokenizerFast`) instead of byte-level, making training 10-50x more efficient. A background prefetch thread overlaps streaming + tokenization with GPU compute.
+
+---
+
+## 📏 What the released model can and cannot actually do (measured 2026-11-05)
+
+Numbers below come from a frozen, pre-registered suite (`surgery/src/eval_spec.json`)
+run on the released `v0.1-marathon` checkpoints, with an untrained HOPE and GPT-2
+small (same 50,257-token vocabulary) put through the **same code** as floor and
+reference. Deterministic only — likelihood and greedy, no sampling luck.
+
+| | held-out wiki ppl | 38-cue factual cloze @1/@5 | 25 **fresh** facts @5 | in-context copy | ARC / MMLU |
+|---|---|---|---|---|---|
+| untrained HOPE | 50 972 | 0.000 / 0.000 | 0.000 | 0.000 | 0.260 / 0.241 |
+| `hope_foundation_best` | 421 | 0.026 / 0.079 | **0.000** | 0.113 (+0.010 from context) | 0.202 / 0.256 |
+| `hope_final_best` | 2 552 | 0.079 / 0.105 | **0.000** | 0.007 | 0.209 / 0.263 |
+| GPT-2 small (reference) | 49 | 0.289 / 0.579 | 0.280 | 0.350 (+0.113) | 0.238 / 0.269 |
+
+**It genuinely does:** write fluent English in Wikipedia's genre; hold a chat format
+and emit Answer/Reasoning structure; keep a running per-token memory that is
+load-bearing (ablate it and perplexity goes 421 → 1 535); run at ~200–500 tok/s on a
+laptop.
+
+**It does not do:** answer questions it was not memorised on (25 fresh facts: 0/25
+top-5); reason — multiple-choice likelihood is at chance **for GPT-2 small too** under
+this protocol, so those columns say little at 86–124M; or reliably use what is in its
+context window (copying 11.3% vs GPT-2's 35%).
+
+**Why (this is the useful part):** auditing the weights shows `head.weight` is the
+only well-trained matrix (rms 18.8× its init), while **61% of embedding rows and CMS
+blocks 8–15 — the slow tiers — are still at random initialisation**. And ridge probes
+of the head's own input recover the current token at R² 0.46 but the **integrated
+context at only R² 0.066**: the 16 position-wise CMS blocks destroy most of what the
+fast memory integrated before the linear head can read it. That is an architectural
+wiring problem, not a training-budget one — see open items 13–14 in
+[`AGENTS.md`](AGENTS.md).
+
+**Training-free weight surgery (`surgery/`, D7)** re-solves just the output layer in
+closed form and halves held-out perplexity (**421 → 216**; the Q&A checkpoint
+**2 552 → 548**) while leaving factual ranking and retrieval where they were — i.e.
+language modelling improves, capability does not. It also maps exactly where the
+ceiling is, which is why no other edit family (memory geometry, embedding repair,
+layer neutralisation, checkpoint merging) survived measurement.
 
 ---
 
@@ -191,6 +233,10 @@ With proper training, the model should:
 2. Generate coherent English sentences
 3. Optionally produce reasoning explanations
 4. Be usable via `chat.py`, `app.py`, or `generate.py`
+
+It should **not** be expected to answer unseen questions: format is learned, factual
+generalisation is not (measured 0/25 on fresh held-out facts — see "What the released
+model can and cannot actually do" above).
 
 ---
 

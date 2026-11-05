@@ -249,7 +249,7 @@ python generate.py --prompt "Why is the sky blue?" --temperature 0.7
 ### Quick Wins
 
 1. **Train longer** — Increase `max_steps` in `run_pipeline.py`. Foundation benefits greatly from 20K+ steps.
-2. **Bigger model** — `d_model=768, n_layers=32` = ~300M params. Much more capable. Requires 32GB+ RAM.
+2. **Bigger model** — `d_model=768, n_layers=32` = ~300M params. Requires 32GB+ RAM. (*Expected* better — untested here: no config larger than the measured 86M has been trained in this repo, and the measured 86M run's limits are documented above, so treat "much more capable" as a hypothesis, not a result.)
 3. **Mixed dataset** — Interleave Wikipedia + Q&A during foundation so the model learns format earlier.
 
 ### Medium Effort
